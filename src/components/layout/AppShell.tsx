@@ -1,7 +1,7 @@
 
 "use client";
 
-import * as React from "react"; // Added this line
+import * as React from "react"; 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Music, BookOpenText, Settings, Menu, LogOut, UserCircle } from "lucide-react";
@@ -54,35 +54,45 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   
   const handleLogout = async () => {
     try {
-      await logOut();
-      toast({ title: "Logged Out", description: "You have been successfully logged out." });
+      await logOut(); // This will now just log in dev mode
+      // toast({ title: "Logged Out (Dev Mode)", description: "Logout simulated." });
     } catch (error) {
-      toast({ title: "Logout Error", description: "Could not log out. Please try again.", variant: "destructive" });
+      toast({ title: "Logout Error (Dev Mode)", description: "Could not simulate log out. Please try again.", variant: "destructive" });
     }
   };
 
   const isAuthPage = pathname === '/login' || pathname === '/signup';
   
+  /*
   React.useEffect(() => {
-    if (!loading && !user && !isAuthPage) {
-      // AuthProvider handles redirection, this is an additional safeguard
-      // or can be removed if AuthProvider's redirection is sufficient.
-    }
-    if (!loading && user && isAuthPage) {
-      router.push('/');
-    }
+    // This redirection logic is disabled for development to keep app accessible
+    // if (!loading && !user && !isAuthPage) {
+    //   router.push('/login');
+    // }
+    // if (!loading && user && isAuthPage) {
+    //   router.push('/');
+    // }
   }, [user, loading, isAuthPage, router, pathname]);
+  */
 
-  if (isAuthPage) {
+  // In dev mode with mocked user, isAuthPage check is the main driver for displaying content
+  // If we are on login/signup, we show that page's content directly
+  if (isAuthPage && !user) { // Allow viewing login/signup if user explicitly logs out (or if mock fails)
     return <div className="min-h-screen bg-background">{children}</div>;
   }
   
-  // AuthProvider shows a global loader, so this shell won't render until auth state is resolved.
-  // If still loading but not an auth page, or no user and not an auth page,
-  // AuthProvider's logic should prevent rendering this shell until redirection or user is confirmed.
+  // If loading (even if mocked to false) or no user (and not an auth page)
+  // This condition will effectively be false in dev mode because user is mocked and loading is false
   if (loading || (!user && !isAuthPage)) {
-     return null; // Or a minimal shell loader if preferred, but AuthProvider handles global loading.
+     return ( // Fallback minimal loader if auth context is somehow not ready
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Button disabled size="lg">
+          Preparing Application...
+        </Button>
+      </div>
+     );
   }
+
 
   return (
     <SidebarProvider defaultOpen={true}>
@@ -133,7 +143,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <DropdownMenuItem disabled>Profile (soon)</DropdownMenuItem>
               <DropdownMenuItem onClick={handleLogout} className="text-red-500 focus:bg-red-500/10 focus:text-red-600 dark:text-red-400 dark:focus:bg-red-400/10 dark:focus:text-red-300">
                 <LogOut className="mr-2 h-4 w-4" />
-                Log out
+                Log out (Dev Mode)
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -187,7 +197,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                             </Button>
                              <Button onClick={handleLogout} variant="outline" className="w-full mt-2 text-sidebar-foreground border-sidebar-border hover:bg-sidebar-accent/20 hover:border-sidebar-accent">
                                 <LogOut className="mr-2 h-4 w-4" />
-                                Log out
+                                Log out (Dev Mode)
                             </Button>
                         </SidebarFooter>
                     </SheetContent>
@@ -208,7 +218,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </div>
         </header>
         <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-            <div className="max-w-screen-2xl mx-auto"> {/* Increased max-width for wider content area */}
+            <div className="max-w-screen-2xl mx-auto"> 
              {children}
             </div>
         </main>
