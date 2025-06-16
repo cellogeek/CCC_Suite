@@ -27,14 +27,25 @@ const mockUser: User = {
   isAnonymous: false,
   photoURL: null,
   providerData: [],
-  metadata: {},
+  metadata: { 
+    creationTime: new Date().toISOString(), 
+    lastSignInTime: new Date().toISOString() 
+  },
   providerId: 'password',
   tenantId: null,
-  delete: async () => {},
+  delete: async () => { console.log("Mock user delete called"); },
   getIdToken: async () => 'dev-token',
-  getIdTokenResult: async () => ({ token: 'dev-token', claims: {}, authTime: '', expirationTime: '', issuedAtTime: '', signInProvider: null, signInSecondFactor: null }),
-  reload: async () => {},
-  toJSON: () => ({}),
+  getIdTokenResult: async () => ({ 
+    token: 'dev-token', 
+    claims: {}, 
+    authTime: new Date().toISOString(),
+    expirationTime: new Date(Date.now() + 3600 * 1000).toISOString(), 
+    issuedAtTime: new Date().toISOString(),
+    signInProvider: null, 
+    signInSecondFactor: null 
+  }),
+  reload: async () => { console.log("Mock user reload called"); },
+  toJSON: () => ({ uid: 'dev-user-uid', email: 'dev@example.com', displayName: 'Dev User' }),
 };
 
 
@@ -46,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /*
   useEffect(() => {
+    // Real authentication listener (commented out for dev mode)
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);
@@ -56,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /*
   useEffect(() => {
+    // Redirection logic (commented out for dev mode)
     if (!loading && !user && pathname !== '/login' && pathname !== '/signup') {
       router.push('/login');
     }
@@ -65,12 +78,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, pass: string): Promise<User | null> => {
     try {
-      // For dev mode, we can simulate signup or just log
       console.log("Dev mode: signUp attempted for", email);
       // const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       // return userCredential.user;
       alert("Signup is disabled in dev mode. You are already logged in with a mock user.");
-      return mockUser; // Or return a new mock user if needed
+      return mockUser; 
     } catch (error) {
       console.error("Error signing up (dev mode):", error);
       throw error; 
@@ -79,12 +91,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, pass: string): Promise<User | null> => {
     try {
-      // For dev mode, simulate signin
       console.log("Dev mode: signIn attempted for", email);
       // const userCredential = await signInWithEmailAndPassword(auth, email, pass);
-      // return userCredential.user;
-      alert("Signin is disabled in dev mode. You are already logged in with a mock user.");
-      setUser(mockUser); // Ensure mock user is set
+      // setUser(userCredential.user); // Set real user if using Firebase
+      setUser(mockUser); // Ensure mock user is set for dev
       return mockUser;
     } catch (error) {
       console.error("Error signing in (dev mode):", error);
@@ -95,9 +105,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logOut = async () => {
     try {
       console.log("Dev mode: logOut attempted. User state remains mocked.");
-      // await firebaseSignOut(auth);
-      // setUser(null); // In dev mode, don't set user to null to keep app accessible
-      // router.push('/login'); // Don't redirect in dev mode
+      // await firebaseSignOut(auth); // Real sign out
+      // setUser(null); // Clear user (don't do this in dev mode if you want to stay "logged in")
+      // router.push('/login'); // Redirect (don't do this in dev mode)
       alert("Logout is simulated in dev mode. You remain logged in with a mock user to continue development.");
     } catch (error) {
       console.error("Error signing out (dev mode):", error);
@@ -135,4 +145,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-

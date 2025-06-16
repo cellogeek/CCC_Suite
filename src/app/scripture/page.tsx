@@ -4,8 +4,8 @@
 import React, { useState, useTransition, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input"; // Keep if other inputs are planned
+import { Label } from "@/components/ui/label"; // Keep for consistency or future use
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BookOpenText, ChevronsRight, Download, Loader2, AlertCircle } from 'lucide-react';
@@ -61,10 +61,15 @@ export default function ScripturePage() {
 
   const handleParseAndFetch = async () => {
     if (!verseInput) return;
-    if (!currentApiKey) {
+    if (!currentApiKey && user) { // Check user to avoid error if API key check is somehow bypassed before user context ready
       setFetchError("ESV API Key is not configured. Please set it in Settings.");
       toast({ title: "API Key Missing", description: "Please set your ESV API Key in Settings.", variant: "destructive" });
       return;
+    }
+    if (!user) { // Should not happen with mock user, but good check
+        setFetchError("User not authenticated.");
+        toast({ title: "Authentication Error", description: "User not authenticated.", variant: "destructive" });
+        return;
     }
     
     startFetchingTransition(async () => {
@@ -75,12 +80,10 @@ export default function ScripturePage() {
       const result = await fetchVerse(query, currentApiKey);
 
       if (result.success && result.data) {
-        // ESV API returns passage as a single string, query contains original reference.
-        // We'll make a single entry for the combined passage.
-        setParsedVerses([{ id: 0, reference: result.query || query, text: result.data.trim() }]);
+        setParsedVerses([{ id: Date.now(), reference: result.query || query, text: result.data.trim() }]);
       } else {
         setFetchError(result.error || 'Verse not found or invalid query. Try a full reference (e.g., John 3:16).');
-        toast({ title: "Error Fetching Verse", description: result.error, variant: "destructive" });
+        toast({ title: "Error Fetching Verse", description: result.error || 'Unknown error', variant: "destructive" });
       }
     });
   };
@@ -90,10 +93,10 @@ export default function ScripturePage() {
 
     let rtf = `{\\rtf1\\ansi\\deff0 {\\fonttbl{\\f0 Arial;}} \\fs24`;
     parsedVerses.forEach(verse => {
-        rtf += `{\\pard\\b ${verse.reference}\\b0\\par}`;
-        // Clean up verse text: remove extra newlines, handle specific ESV artifacts if any.
+        const rtfEscape = (str: string | undefined) => String(str || '').replace(/\\/g, '\\\\').replace(/{/g, '\\{').replace(/}/g, '\\}');
+        rtf += `{\\pard\\b ${rtfEscape(verse.reference)}\\b0\\par}`;
         const cleanedText = verse.text.replace(/\n\s*\n/g, '\\par ').replace(/\n/g, ' ');
-        rtf += `{\\pard ${cleanedText}\\par}`;
+        rtf += `{\\pard ${rtfEscape(cleanedText)}\\par}`;
         rtf += `{\\pard\\par}`; 
     });
     rtf += `}`;
@@ -141,7 +144,7 @@ export default function ScripturePage() {
             <Button 
                 onClick={handleParseAndFetch} 
                 className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground" 
-                disabled={isFetching || !verseInput || !apiKeyChecked || !currentApiKey}
+                disabled={isFetching || !verseInput || (!apiKeyChecked && user) || (!currentApiKey && user) }
             >
               <ChevronsRight className="mr-2 h-4 w-4" />
               {isFetching ? 'Fetching...' : 'Parse & Fetch Verses'}
@@ -185,7 +188,7 @@ export default function ScripturePage() {
                 </div>
             </ScrollArea>
             <div className="border-t border-border pt-4 mt-4 flex justify-end">
-                 <Button onClick={handleGenerateRtf} icon={Download} disabled={parsedVerses.length === 0 || isFetching} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                 <Button onClick={handleGenerateRtf} disabled={parsedVerses.length === 0 || isFetching} className="bg-primary hover:bg-primary/90 text-primary-foreground">
                     <Download className="mr-2 h-4 w-4" />
                     Generate RTF
                  </Button>
