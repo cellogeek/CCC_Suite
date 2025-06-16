@@ -105,7 +105,7 @@ export default function ChordProPage() {
       const song = CustomParserV9.parse(debouncedChordProInput);
       setParsedSong(song);
       setSongTitleForSave(song.title || "Untitled Song");
-      addLog("Parsed Song Object:", {title: song.title, artist: song.artist, key: song.key, metaCount: Object.keys(song.meta).length, bodyLines: song.body.length});
+      addLog("Parsed Song Object:", {title: song.title, artist: song.artist, key: song.key, metaCount: Object.keys(song.meta).length, footerCommentsCount: song.footer_comments.length, bodyLines: song.body.length});
       const originalKey = song.key;
       if (originalKey && musicalKeys.includes(originalKey)) {
         setTargetKey(originalKey);
@@ -205,7 +205,12 @@ export default function ChordProPage() {
         let footerContent = '';
         if (footerMeta.ccli) footerContent += `CCLI Song #${footerMeta.ccli}<br>`;
         if (footerMeta.copyright) footerContent += `${footerMeta.copyright}<br>`;
-        if (footerMeta.footer) footerContent += `${footerMeta.footer}<br>`; // Custom footer text
+        if (footerMeta.footer) footerContent += `${footerMeta.footer}<br>`;
+        
+        if (songToFormat.footer_comments && songToFormat.footer_comments.length > 0) {
+            if (footerContent) footerContent += '<br>'; 
+            footerContent += songToFormat.footer_comments.join('<br>');
+        }
         
         if(footerContent) {
             html += `<div class="footer">${footerContent}</div>`;
@@ -230,11 +235,11 @@ export default function ChordProPage() {
         if (line.type === 'section') { rtf += `{\\pard\\sa200\\sl276\\slmult1\\b\\f0\\fs24 ${rtfEscape(line.content)}\\par}`; }
         else if (line.type === 'comment') { rtf += `{\\pard\\sa200\\sl276\\slmult1\\i\\f0\\fs24 ${rtfEscape(line.content)}\\par}`; }
         else if (line.type === 'chorus_start') { 
-            rtf += `{\\pard\\li720\\sa100\\sl276\\slmult1 `; // Indent chorus start
+            rtf += `{\\pard\\li720\\sa100\\sl276\\slmult1 `; 
             inChorus = true;
         }
         else if (line.type === 'chorus_end') { 
-            rtf += `\\par}`; // End chorus block
+            rtf += `\\par}`; 
             inChorus = false;
         }
         else if (line.type === 'lyrics' && line.items) {
@@ -243,7 +248,6 @@ export default function ChordProPage() {
                 return; 
             }
             
-            // Start lyric line paragraph, apply chorus indent if active
             rtf += `{\\pard${inChorus ? '\\li720': ''}\\sa100\\sl276\\slmult1\\trowd \\trgaph108\\trleft-108`;
             
             let chordsRow = '';
@@ -255,7 +259,7 @@ export default function ChordProPage() {
                 const chord = simplifyChordDisplay(item.chord) || '';
                 const lyrics = item.lyrics || ' '; 
                 const text = chord.length > lyrics.length ? chord : lyrics;
-                const cellWidth = Math.floor(text.length * 150) + 200; // Approx char width in twips
+                const cellWidth = Math.floor(text.length * 150) + 200; 
                 currentPos += cellWidth;
                 
                 chordsRow += `{\\pard\\intbl\\b\\cf1\\f1\\fs24 ${rtfEscape(chord)}\\cell}`;
@@ -264,21 +268,30 @@ export default function ChordProPage() {
             });
 
             rtf += cellsDef + chordsRow + `\\row` + lyricsRow + `\\row}`;
-            rtf += `}`; // End the paragraph for the table row
+            rtf += `}`; 
         }
     });
 
     if (showFooter) {
         rtf += `{\\pard\\qc\\sa200\\sl276\\slmult1\\fs18 `;
         const footerMeta = processedSong.meta || {};
-        let footerText = "";
-        if (footerMeta.ccli) { footerText += `CCLI Song #${rtfEscape(footerMeta.ccli)} `; }
-        if (footerMeta.copyright) { footerText += rtfEscape(footerMeta.copyright); }
-        if (footerMeta.footer) { footerText += (footerText ? `\\par ` : ``) + rtfEscape(footerMeta.footer); }
-        rtf += footerText;
-        rtf += `\\par}`;
+        let footerContentString = "";
+        if (footerMeta.ccli) { footerContentString += `CCLI Song #${rtfEscape(footerMeta.ccli)} `; }
+        if (footerMeta.copyright) { footerContentString += rtfEscape(footerMeta.copyright); }
+        if (footerMeta.footer) { footerContentString += (footerContentString.trim() ? `\\par ` : ``) + rtfEscape(footerMeta.footer); }
+
+        if (processedSong.footer_comments && processedSong.footer_comments.length > 0) {
+            if (footerContentString.trim()) footerContentString += '\\par '; 
+            footerContentString += processedSong.footer_comments.map(line => rtfEscape(line)).join('\\par ');
+        }
+        
+        if (footerContentString.trim()) {
+          rtf += footerContentString;
+          rtf += `\\par`; 
+        }
+        rtf += `}`; 
     }
-    rtf += `}`; // Close main RTF group
+    rtf += `}`; 
     return rtf;
   };
   
@@ -531,4 +544,3 @@ export default function ChordProPage() {
     </div>
   );
 }
-
