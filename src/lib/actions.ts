@@ -80,7 +80,6 @@ export async function simplifyChordsAI(chordProText: string, currentKey: string)
     await new Promise(resolve => setTimeout(resolve, 1500));
     
     let simplified = chordProText;
-    // Corrected regular expressions
     simplified = simplified.replace(/\[([A-G])m7\]/g, '[$1m]');
     simplified = simplified.replace(/\[([A-G])maj7\]/g, '[$1]');
     simplified = simplified.replace(/\[([A-G])7\]/g, '[$1]');
@@ -94,10 +93,10 @@ export async function simplifyChordsAI(chordProText: string, currentKey: string)
     return `{comment: Simplified version for key ${currentKey} (placeholder AI logic)}\n${simplified}`;
 }
 
-export async function fetchVerse(reference: string, apiKey: string | null): Promise<{success: boolean, data?: string, error?: string}> {
+export async function fetchVerse(reference: string, apiKey: string | null): Promise<{success: boolean, data?: string, error?: string, query?: string}> {
     console.log(`Fetching verse: ${reference} using API key: ${apiKey ? 'Provided' : 'Not provided'}`);
     if (!apiKey) {
-        return {success: false, error: "ESV API Key not configured. Please set it in Settings."};
+        return {success: false, error: "ESV API Key not configured. Please set it in Settings.", query: reference};
     }
     
     try {
@@ -107,22 +106,26 @@ export async function fetchVerse(reference: string, apiKey: string | null): Prom
             }
         });
 
+        const responseBody = await response.json();
+
         if (!response.ok) {
-            const errorData = await response.json();
-            console.error("ESV API Error:", errorData);
-            return {success: false, error: `ESV API error: ${errorData.detail || response.statusText}`};
+            console.error("ESV API Error:", responseBody);
+            return {success: false, error: `ESV API error: ${responseBody.detail || response.statusText}`, query: reference};
         }
 
-        const data = await response.json();
-        if (data.passages && data.passages.length > 0) {
-            return { success: true, data: data.passages[0].trim() };
+        if (responseBody.passages && responseBody.passages.length > 0) {
+            return { success: true, data: responseBody.passages[0].trim(), query: responseBody.query || reference };
         } else {
-            return { success: false, error: `Verse for "${reference}" not found or invalid reference.`};
+            return { success: false, error: `Verse for "${reference}" not found or invalid reference. API returned no passages.`, query: reference};
         }
 
     } catch (error) {
         console.error("Error fetching verse from ESV API:", error);
-        return { success: false, error: "Could not connect to ESV API. " + (error as Error).message };
+        let errorMessage = "Could not connect to ESV API or unexpected response format.";
+        if (error instanceof Error) {
+            errorMessage += " " + error.message;
+        }
+        return { success: false, error: errorMessage, query: reference };
     }
 }
 
@@ -142,7 +145,7 @@ export async function saveSongToFirestore(userId: string, songTitle: string, cho
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
-    revalidatePath("/"); // Revalidate ChordPro page
+    revalidatePath("/"); 
     return { success: true, message: "Song saved successfully!", songId: docRef.id };
   } catch (error) {
     console.error("Error saving song to Firestore:", error);
@@ -157,7 +160,7 @@ export async function loadSongsFromFirestore(userId: string): Promise<{ success:
 
   try {
     const songsCollectionRef = collection(db, "users", userId, "songs");
-    const q = query(songsCollectionRef); // Potentially add orderBy('title') or orderBy('updatedAt', 'desc')
+    const q = query(songsCollectionRef); 
     const querySnapshot = await getDocs(q);
     
     const songs: {id: string, title: string, content: string}[] = [];
