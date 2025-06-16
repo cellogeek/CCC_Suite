@@ -20,8 +20,8 @@ async function getCurrentUserId(): Promise<string | null> {
   // For now, this won't work directly without client passing UID or ID token.
   // We will modify functions to accept userId as a parameter.
   // const user = auth.currentUser; // This only works client-side or with specific server setups
-  // return user ? user.uid : null;
-  return null; // Placeholder - functions will require userId
+  // return user ? user.uid : null; // Placeholder - functions will require userId
+  return null;
 }
 
 
@@ -171,3 +171,4 @@ export async function loadSongsFromFirestore(userId: string): Promise<{ success:
     return { success: false, message: "Failed to load songs. " + (error as Error).message };
   }
 }
+
