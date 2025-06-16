@@ -346,7 +346,7 @@ export default function ChordProPage() {
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-[520px] w-full p-4 rounded-md border border-input bg-white dark:bg-muted/20">
-              <div className="prose prose-sm dark:prose-invert max-w-none">
+              <div className="max-w-none">
                  {renderedContent.length > 0 ? renderedContent : <p className="text-muted-foreground">Enter ChordPro text to see a preview.</p>}
               </div>
             </ScrollArea>
