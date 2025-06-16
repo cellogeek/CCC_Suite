@@ -80,11 +80,12 @@ export async function simplifyChordsAI(chordProText: string, currentKey: string)
     await new Promise(resolve => setTimeout(resolve, 1500));
     
     let simplified = chordProText;
-    simplified = simplified.replace(/\\[([A-G])m7\\]/g, '[$1m]');
-    simplified = simplified.replace(/\\[([A-G])maj7\\]/g, '[$1]');
-    simplified = simplified.replace(/\\[([A-G])7\\]/g, '[$1]');
-    simplified = simplified.replace(/\\[([A-G])sus4\\]/g, '[$1]');
-    simplified = simplified.replace(/\\[([A-G])add9\\]/g, '[$1]');
+    // Corrected regular expressions
+    simplified = simplified.replace(/\[([A-G])m7\]/g, '[$1m]');
+    simplified = simplified.replace(/\[([A-G])maj7\]/g, '[$1]');
+    simplified = simplified.replace(/\[([A-G])7\]/g, '[$1]');
+    simplified = simplified.replace(/\[([A-G])sus4\]/g, '[$1]');
+    simplified = simplified.replace(/\[([A-G])add9\]/g, '[$1]');
 
     if (simplified === chordProText) {
         return `{comment: AI attempted simplification for key ${currentKey}, but no obvious changes were made based on placeholder logic.}\n${chordProText}`;
