@@ -2,8 +2,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Music2, BookOpenText, Settings, Menu } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Music2, BookOpenText, Settings, Menu, LogOut, UserCircle } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   SidebarProvider,
   Sidebar,
@@ -26,16 +27,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"; // For mobile nav
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+
 
 const navItems = [
-  { href: "/", label: "ChordPro Suite", icon: Music2 },
-  { href: "/scripture", label: "Scripture Lookup", icon: BookOpenText },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/", label: "ChordPro Suite", icon: Music2, protected: true },
+  { href: "/scripture", label: "Scripture Lookup", icon: BookOpenText, protected: true },
+  { href: "/settings", label: "Settings", icon: Settings, protected: true },
 ];
 
-// Simple SVG Logo Placeholder
 const Logo = () => (
   <svg width="32" height="32" viewBox="0 0 100 100" className="text-primary" fill="currentColor">
     <rect width="100" height="100" rx="20" fill="hsl(var(--primary-foreground))" />
@@ -46,11 +48,49 @@ const Logo = () => (
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, loading, logOut } = useAuth();
+  const { toast } = useToast();
+
   const currentPage = navItems.find((item) => item.href === pathname || (item.href !== "/" && pathname.startsWith(item.href)));
+  
+  const handleLogout = async () => {
+    try {
+      await logOut();
+      toast({ title: "Logged Out", description: "You have been successfully logged out." });
+    } catch (error) {
+      toast({ title: "Logout Error", description: "Could not log out. Please try again.", variant: "destructive" });
+    }
+  };
+
+  // If loading, or if no user and on a protected route that isn't login/signup, show nothing or a loader.
+  // AuthContext already handles a global loader and redirection.
+  // This check is to prevent rendering the shell if user is not authenticated and on a protected page.
+  const isAuthPage = pathname === '/login' || pathname === '/signup';
+  if (!loading && !user && !isAuthPage) {
+     // AuthProvider will redirect, so we can return null or a minimal loader here to avoid flicker
+    return null; 
+  }
+  
+  // If user is logged in but on login/signup page, redirect to home
+  React.useEffect(() => {
+    if (!loading && user && isAuthPage) {
+      router.push('/');
+    }
+  }, [user, loading, isAuthPage, router]);
+
+
+  // Don't render AppShell for login/signup pages
+  if (isAuthPage) {
+    return <>{children}</>;
+  }
+  
+  // If loading and not an auth page, AppShell might render briefly.
+  // AuthProvider's loader should cover most cases.
+  // If user is definitively not logged in and not on an auth page, this component might not even mount due to AuthProvider's redirect.
 
   return (
     <SidebarProvider defaultOpen={true}>
-      {/* Desktop Sidebar */}
       <Sidebar className="hidden md:block border-r border-sidebar-border">
         <SidebarHeader className="p-4">
           <Link href="/" className="flex items-center gap-3">
@@ -84,27 +124,28 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center justify-start gap-3 w-full p-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0">
                 <Avatar className="h-9 w-9">
-                  <AvatarImage src="https://placehold.co/100x100.png" alt="User Avatar" data-ai-hint="user avatar" />
-                  <AvatarFallback>U</AvatarFallback>
+                  {user?.photoURL ? <AvatarImage src={user.photoURL} alt="User Avatar" /> : <AvatarFallback><UserCircle size={20}/></AvatarFallback>}
                 </Avatar>
                 <div className="group-data-[collapsible=icon]:hidden text-left">
-                    <p className="font-semibold text-sm font-body">User Name</p>
-                    <p className="text-xs text-muted-foreground font-body">user@example.com</p>
+                    <p className="font-semibold text-sm font-body">{user?.displayName || user?.email?.split('@')[0] || "User"}</p>
+                    <p className="text-xs text-muted-foreground font-body">{user?.email || "Logged In"}</p>
                 </div>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start" className="w-56 font-body mb-2">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuLabel>{user?.displayName || user?.email}</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>Profile</DropdownMenuItem>
-              <DropdownMenuItem>Log out</DropdownMenuItem>
+              <DropdownMenuItem disabled>Profile (soon)</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleLogout} className="text-red-500 focus:bg-red-500/10 focus:text-red-600">
+                <LogOut className="mr-2 h-4 w-4" />
+                Log out
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </SidebarFooter>
       </Sidebar>
       
       <div className="flex flex-col md:pl-[var(--sidebar-width)] group-data-[collapsible=icon]:md:pl-[var(--sidebar-width-icon)] transition-[padding-left] duration-200 ease-linear">
-        {/* Mobile Header & Sidebar Trigger */}
          <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b bg-background/80 px-4 backdrop-blur-md md:justify-end">
             <div className="md:hidden">
                 <Sheet>
@@ -141,15 +182,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         </nav>
                         </SidebarContent>
                          <SidebarFooter className="p-4 mt-auto border-t">
-                           {/* Simplified user for mobile */}
                             <Button variant="ghost" className="flex items-center justify-start gap-3 w-full p-2">
                                 <Avatar className="h-9 w-9">
-                                <AvatarImage src="https://placehold.co/100x100.png" alt="User Avatar" data-ai-hint="user avatar" />
-                                <AvatarFallback>U</AvatarFallback>
+                                  {user?.photoURL ? <AvatarImage src={user.photoURL} alt="User Avatar" /> : <AvatarFallback><UserCircle size={20}/></AvatarFallback>}
                                 </Avatar>
                                 <div className="text-left">
-                                    <p className="font-semibold text-sm font-body">User Name</p>
+                                    <p className="font-semibold text-sm font-body">{user?.displayName || user?.email?.split('@')[0] || "User"}</p>
                                 </div>
+                            </Button>
+                             <Button onClick={handleLogout} variant="outline" className="w-full mt-2">
+                                <LogOut className="mr-2 h-4 w-4" />
+                                Log out
                             </Button>
                         </SidebarFooter>
                     </SheetContent>

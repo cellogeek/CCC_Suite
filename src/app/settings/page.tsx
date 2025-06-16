@@ -6,24 +6,27 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Settings as SettingsIcon, Save, Eye, EyeOff } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Eye, EyeOff, Trash2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { saveApiKey, getApiKey } from '@/lib/actions';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function SettingsPage() {
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const fetchAndSetApiKey = useCallback(() => {
+    if (!user) return;
     startTransition(async () => {
       try {
-        const currentKey = await getApiKey();
+        const currentKey = await getApiKey(user.uid);
         if (currentKey) {
           setApiKeyInput(currentKey);
         } else {
-          setApiKeyInput(""); // Ensure field is cleared if no key is stored
+          setApiKeyInput(""); 
         }
       } catch (error) {
         console.error("Failed to fetch API key:", error);
@@ -34,7 +37,7 @@ export default function SettingsPage() {
         });
       }
     });
-  }, [toast]);
+  }, [user, toast]);
 
 
   useEffect(() => {
@@ -43,8 +46,12 @@ export default function SettingsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      toast({ title: "Not Authenticated", description: "Please log in to save settings.", variant: "destructive" });
+      return;
+    }
     startTransition(async () => {
-      const result = await saveApiKey(apiKeyInput);
+      const result = await saveApiKey(user.uid, apiKeyInput);
       if (result.success) {
         toast({
           title: "Success",
@@ -57,8 +64,29 @@ export default function SettingsPage() {
           variant: "destructive",
         });
       }
-      // Optionally re-fetch to confirm or rely on optimistic update
-      // fetchAndSetApiKey(); 
+    });
+  };
+
+  const handleClearKey = () => {
+    if (!user) {
+      toast({ title: "Not Authenticated", description: "Please log in to clear settings.", variant: "destructive" });
+      return;
+    }
+    startTransition(async () => {
+      const result = await saveApiKey(user.uid, ""); // Pass empty string to clear
+      if (result.success) {
+        setApiKeyInput("");
+        toast({
+          title: "API Key Cleared",
+          description: result.message,
+        });
+      } else {
+        toast({
+          title: "Error Clearing Key",
+          description: result.message,
+          variant: "destructive",
+        });
+      }
     });
   };
 
@@ -71,7 +99,7 @@ export default function SettingsPage() {
             Application Settings
           </CardTitle>
           <CardDescription>
-            Configure your application settings, such as API keys for external services.
+            Configure your application settings, such as API keys for external services. Your settings are saved per user.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -92,6 +120,7 @@ export default function SettingsPage() {
                   onChange={(e) => setApiKeyInput(e.target.value)}
                   placeholder="Enter your ESV API Key"
                   className="bg-background flex-grow"
+                  disabled={isPending || !user}
                 />
                 <Button
                   type="button"
@@ -99,27 +128,28 @@ export default function SettingsPage() {
                   size="icon"
                   onClick={() => setShowApiKey(!showApiKey)}
                   aria-label={showApiKey ? "Hide API Key" : "Show API Key"}
+                  disabled={isPending || !user}
                 >
                   {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
               <p className="text-sm text-muted-foreground">
-                Obtain an API key from the <a href="https://api.esv.org/" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">ESV API website</a>. This key is stored server-side (currently in memory for this demo).
+                Obtain an API key from the <a href="https://api.esv.org/" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">ESV API website</a>. This key is stored securely.
               </p>
             </div>
-            <Button type="submit" disabled={isPending} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              <Save className="mr-2 h-4 w-4" />
-              {isPending ? "Saving..." : "Save API Key"}
-            </Button>
-             {apiKeyInput && (
-                <Button type="button" variant="outline" onClick={() => {
-                    setApiKeyInput("");
-                    // Optionally, you could call saveApiKey("") here immediately
-                    // or let the user click "Save API Key" to confirm clearing.
-                }} className="ml-2">
-                    Clear Key
+            <div className="flex items-center gap-2">
+                <Button type="submit" disabled={isPending || !user} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Save className="mr-2 h-4 w-4" />
+                {isPending ? "Saving..." : "Save API Key"}
                 </Button>
-            )}
+                {apiKeyInput && (
+                    <Button type="button" variant="outline" onClick={handleClearKey} disabled={isPending || !user} className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/50">
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Clear Key
+                    </Button>
+                )}
+            </div>
+             {!user && <p className="text-sm text-destructive">Please log in to manage API keys.</p>}
           </form>
         </CardContent>
       </Card>
