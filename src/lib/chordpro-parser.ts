@@ -16,6 +16,7 @@ export interface ParsedSong {
   artist: string;
   key: string;
   meta: Record<string, string>;
+  footer_comments: string[]; // CHANGE 1: Add new property
   body: SongLine[];
 }
 
@@ -26,6 +27,7 @@ export const CustomParserV9 = {
       artist: '',
       key: 'C',
       meta: {},
+      footer_comments: [], // Initialize new property
       body: [],
     };
     const lines = text.split(/\r?\n/);
@@ -42,6 +44,8 @@ export const CustomParserV9 = {
           case 'soc': case 'start_of_chorus': song.body.push({ type: 'chorus_start' }); return;
           case 'eoc': case 'end_of_chorus': song.body.push({ type: 'chorus_end' }); return;
           case 'c': case 'comment': song.body.push({ type: 'comment', content: value }); return;
+          // --- CHANGE 2: Add a case for our new footer comment directive ---
+          case 'cf': case 'comment_footer': song.footer_comments.push(value); return;
           default: song.meta[key] = value; return;
         }
       }
