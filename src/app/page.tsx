@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
+import { Label } from "@/components/ui/label"; // Ensured import
 import { Checkbox } from "@/components/ui/checkbox";
 import { Music, Settings2, Lightbulb, RotateCcw, Save, FolderOpen, FileDown, FileText } from 'lucide-react';
 import { simplifyChordsAI, saveSongToFirestore, loadSongsFromFirestore } from '@/lib/actions';
@@ -80,7 +80,7 @@ const renderChordPro = (text: string, options: OutputOptions) => {
     if (line.includes('[')) {
       const parts = [];
       let lastIndex = 0;
-      const regex = /\\[([^\\]]+)\\]([^[]*)/g;
+      const regex = /\[([^\]]+)\]([^[]*)/g;
       let match;
       while ((match = regex.exec(line)) !== null) {
         if (match.index > lastIndex) {
