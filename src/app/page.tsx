@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch"; // Changed from Checkbox
+import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Music, FileText, Download, FileUp, Workflow, TerminalSquare, Eye, Save, FolderOpen, Loader2 } from 'lucide-react';
@@ -50,7 +50,7 @@ const SongPreview = ({ htmlContent }: { htmlContent: string }) => {
       srcDoc={htmlContent}
       title="Song Preview"
       className="w-full h-full bg-white rounded-lg border-none"
-      sandbox="allow-scripts" // Allow scripts if your HTML needs them, otherwise can be more restrictive
+      sandbox="allow-scripts"
     />
   );
 };
@@ -63,8 +63,7 @@ export default function ChordProPage() {
   const [songTitleForSave, setSongTitleForSave] = useState("Untitled Song");
 
   const [showArtist, setShowArtist] = useState(true);
-  const [showCcli, setShowCcli] = useState(true);
-  const [showCopyright, setShowCopyright] = useState(true);
+  const [showFooter, setShowFooter] = useState(true); // Consolidated from showCopyright, showCcli removed
 
   const [parsedSong, setParsedSong] = useState<ParsedSong | null>(null);
   const [log, setLog] = useState<string[]>([]);
@@ -83,7 +82,8 @@ export default function ChordProPage() {
     let logMessage = `[${timestamp}] ${message}`;
     if (data) {
       try {
-        logMessage += `\n${JSON.stringify(data, null, 2)}`;
+        logMessage += `\n${JSON.stringify(data, (key, value) =>
+          typeof value === 'bigint' ? value.toString() : value, 2)}`;
       } catch (e) {
         logMessage += `\n[Error serializing data for log]`;
       }
@@ -112,7 +112,7 @@ export default function ChordProPage() {
         addLog(`Successfully parsed song. Detected and set key: ${originalKey}.`);
       } else {
         addLog(`Successfully parsed song. Key: ${originalKey || 'Not Found'}. Defaulting/keeping target key: C.`);
-        setTargetKey('C'); // Default if key is not found or invalid
+        setTargetKey('C');
       }
     } catch (e: any) {
       addLog(`FATAL ERROR: ${e.message}`);
@@ -129,7 +129,7 @@ export default function ChordProPage() {
     const originalKey = parsedSong.key || 'C';
     const notes: Record<string, number> = { 'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11 };
     
-    const originalRoot = originalKey.replace(/m$/, ''); // Handle minor keys by taking root
+    const originalRoot = originalKey.replace(/m$/, '');
     const targetRoot = targetKey.replace(/m$/, '');
     
     let interval = 0;
@@ -142,7 +142,7 @@ export default function ChordProPage() {
 
     return {
       ...parsedSong,
-      key: targetKey, // Display the target key
+      key: targetKey,
       body: parsedSong.body.map(line => {
         if (line.type !== 'lyrics' || !line.items) return line;
         return {
@@ -163,12 +163,9 @@ export default function ChordProPage() {
     const root = rootMatch[0];
     const restOfChord = chord.substring(root.length);
     
-    // Common simplifications: m7->m, maj7->"", 7->"", sus->"", add9->"" etc.
-    if (restOfChord.startsWith('m')) { // Covers m, m7, m9, m11, m6 etc. -> m
+    if (restOfChord.startsWith('m')) {
         return root + 'm';
     }
-    // For major-type chords (maj7, 7, 6, add9, sus), simplify to root.
-    // This is a basic simplification, more nuanced logic could be added.
     return root;
   };
 
@@ -202,52 +199,86 @@ export default function ChordProPage() {
             html += `<div class="line-pair"><div class="chord-line">${chordLine}</div><div class="lyric-line">${lyricLine}</div></div>`;
         }
     });
+    
     const footerMeta = songToFormat.meta || {};
-    if (showCcli && footerMeta.ccli) { html += `<div class="footer">CCLI Song #${footerMeta.ccli}</div>`; }
-    if (showCopyright && footerMeta.copyright) { html += `<div class="footer">${footerMeta.copyright}</div>`; }
-    if (showCopyright && footerMeta.footer) { html += `<div class="footer">${footerMeta.footer}</div>`; }
+    if (showFooter) {
+        let footerContent = '';
+        if (footerMeta.ccli) footerContent += `CCLI Song #${footerMeta.ccli}<br>`;
+        if (footerMeta.copyright) footerContent += `${footerMeta.copyright}<br>`;
+        if (footerMeta.footer) footerContent += `${footerMeta.footer}<br>`; // Custom footer text
+        
+        if(footerContent) {
+            html += `<div class="footer">${footerContent}</div>`;
+        }
+    }
     html += `</div></body></html>`;
     return html;
-  }, [processedSong, simplifyChords, showArtist, showCcli, showCopyright]);
+  }, [processedSong, simplifyChords, showArtist, showFooter]);
 
   const generateRtfContent = () => {
     if (!processedSong) return null;
     addLog("--- GENERATING RTF ---");
     const rtfEscape = (str: string | undefined) => String(str || '').replace(/\\/g, '\\\\').replace(/{/g, '\\{').replace(/}/g, '\\}');
-    let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}{\\f1 Courier New;}}{\\colortbl;\\red255\\green140\\blue0;}`; // Orange color for chords
+    let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}{\\f1 Courier New;}}{\\colortbl;\\red255\\green0\\blue0;}`; // Red color for chords
+    
     rtf += `{\\pard\\qc\\sa200\\sl276\\slmult1\\b\\f0\\fs32 ${rtfEscape(processedSong.title)}\\par}`;
     if (showArtist && processedSong.artist) { rtf += `{\\pard\\qc\\b0\\fs24 Artist: ${rtfEscape(processedSong.artist)}\\par}`; }
     rtf += `{\\pard\\qc\\b0\\fs24 Key: ${rtfEscape(processedSong.key)}\\par}\\par`;
     
+    let inChorus = false;
     processedSong.body.forEach(line => {
         if (line.type === 'section') { rtf += `{\\pard\\sa200\\sl276\\slmult1\\b\\f0\\fs24 ${rtfEscape(line.content)}\\par}`; }
         else if (line.type === 'comment') { rtf += `{\\pard\\sa200\\sl276\\slmult1\\i\\f0\\fs24 ${rtfEscape(line.content)}\\par}`; }
-        else if (line.type === 'chorus_start') { rtf += `{\\pard\\li720\\sa100\\sl276\\slmult1 `; } // Indent chorus
-        else if (line.type === 'chorus_end') { rtf += `\\par}`; } // End chorus indent
+        else if (line.type === 'chorus_start') { 
+            rtf += `{\\pard\\li720\\sa100\\sl276\\slmult1 `; // Indent chorus start
+            inChorus = true;
+        }
+        else if (line.type === 'chorus_end') { 
+            rtf += `\\par}`; // End chorus block
+            inChorus = false;
+        }
         else if (line.type === 'lyrics' && line.items) {
-            if (line.items.length === 0) { rtf += `{\\pard\\sa200\\sl276\\slmult1\\fs24 \\par}`; return; }
+            if (line.items.length === 0) { 
+                rtf += `{\\pard${inChorus ? '\\li720': ''}\\sa200\\sl276\\slmult1\\fs24 \\par}`;
+                return; 
+            }
             
-            let chordsRtf = '';
-            let lyricsRtf = '';
+            // Start lyric line paragraph, apply chorus indent if active
+            rtf += `{\\pard${inChorus ? '\\li720': ''}\\sa100\\sl276\\slmult1\\trowd \\trgaph108\\trleft-108`;
+            
+            let chordsRow = '';
+            let lyricsRow = '';
+            let cellsDef = '';
+            let currentPos = 0;
+            
             line.items.forEach(item => {
-                const chord = simplifyChordDisplay(item.chord);
+                const chord = simplifyChordDisplay(item.chord) || '';
                 const lyrics = item.lyrics || ' '; 
-                chordsRtf += `{\\cf1\\b\\f1 ${rtfEscape(chord)}}{${' '.repeat(Math.max(0,lyrics.length - (chord||'').length))}}`;
-                lyricsRtf += rtfEscape(lyrics);
+                const text = chord.length > lyrics.length ? chord : lyrics;
+                const cellWidth = Math.floor(text.length * 150) + 200; // Approx char width in twips
+                currentPos += cellWidth;
+                
+                chordsRow += `{\\pard\\intbl\\b\\cf1\\f1\\fs24 ${rtfEscape(chord)}\\cell}`;
+                lyricsRow += `{\\pard\\intbl\\b0\\cf0\\f0\\fs24 ${rtfEscape(lyrics)}\\cell}`;
+                cellsDef += `\\clbrdrb\\brdrs\\clbrdrl\\brdrs\\clbrdrr\\brdrs\\clbrdrt\\brdrs\\cellx${currentPos}`;
             });
 
-            if(line.type !== 'chorus_start') rtf += `{\\pard\\sa100\\sl276\\slmult1 `; // Reset paragraph for non-chorus lines
-            rtf += `{\\pard\\sa100\\sl276\\slmult1\\f1\\fs24 ${chordsRtf}\\par}`;
-            rtf += `{\\pard\\sa200\\sl276\\slmult1\\f0\\fs24 ${lyricsRtf}\\par}`;
-            if(line.type !== 'chorus_start') rtf += `}`;
+            rtf += cellsDef + chordsRow + `\\row` + lyricsRow + `\\row}`;
+            rtf += `}`; // End the paragraph for the table row
         }
     });
-    rtf += `{\\pard\\qc\\sa200\\sl276\\slmult1\\fs18 `;
-    const footerMeta = processedSong.meta || {};
-    if (showCcli && footerMeta.ccli) { rtf += `CCLI Song #${rtfEscape(footerMeta.ccli)} `; }
-    if (showCopyright && footerMeta.copyright) { rtf += rtfEscape(footerMeta.copyright); }
-    if (showCopyright && footerMeta.footer) { rtf += `\\par ${rtfEscape(footerMeta.footer)}`; }
-    rtf += `\\par}}`;
+
+    if (showFooter) {
+        rtf += `{\\pard\\qc\\sa200\\sl276\\slmult1\\fs18 `;
+        const footerMeta = processedSong.meta || {};
+        let footerText = "";
+        if (footerMeta.ccli) { footerText += `CCLI Song #${rtfEscape(footerMeta.ccli)} `; }
+        if (footerMeta.copyright) { footerText += rtfEscape(footerMeta.copyright); }
+        if (footerMeta.footer) { footerText += (footerText ? `\\par ` : ``) + rtfEscape(footerMeta.footer); }
+        rtf += footerText;
+        rtf += `\\par}`;
+    }
+    rtf += `}`; // Close main RTF group
     return rtf;
   };
   
@@ -282,7 +313,6 @@ export default function ChordProPage() {
         reader.onload = (e) => {
             const fileContent = e.target?.result as string;
             setChordProInput(fileContent);
-            // setParsedSong(null); // Debounce will handle re-parsing
             addLog("File content loaded. Auto-parsing will begin shortly.");
         };
         reader.onerror = (e) => {
@@ -291,7 +321,7 @@ export default function ChordProPage() {
         }
         reader.readAsText(file);
     }
-    if(fileInputRef.current) fileInputRef.current.value = ""; // Reset file input
+    if(fileInputRef.current) fileInputRef.current.value = ""; 
   };
 
   const handleDownloadLog = () => {
@@ -346,7 +376,6 @@ export default function ChordProPage() {
   const handleLoadSelectedSong = (song: SongToLoad) => {
     setChordProInput(song.content);
     setSongTitleForSave(song.title);
-    // Parsing will be handled by useEffect on debouncedChordProInput
     toast({ title: "Song Loaded", description: `'${song.title}' has been loaded.`});
     setIsLoadSongDialogOpen(false);
   };
@@ -462,12 +491,8 @@ export default function ChordProPage() {
                     <Switch id="show-artist-switch" checked={showArtist} onCheckedChange={setShowArtist} disabled={!parsedSong}/>
                   </div>
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="show-ccli-switch">Show CCLI#</Label>
-                    <Switch id="show-ccli-switch" checked={showCcli} onCheckedChange={setShowCcli} disabled={!parsedSong}/>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="show-copyright-switch">Show Copyright/Footer</Label>
-                    <Switch id="show-copyright-switch" checked={showCopyright} onCheckedChange={setShowCopyright} disabled={!parsedSong}/>
+                    <Label htmlFor="show-footer-switch">Show Footer</Label>
+                    <Switch id="show-footer-switch" checked={showFooter} onCheckedChange={setShowFooter} disabled={!parsedSong}/>
                   </div>
                 </div>
               </div>
@@ -506,3 +531,4 @@ export default function ChordProPage() {
     </div>
   );
 }
+
