@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Settings as SettingsIcon, Save, Eye, EyeOff, Trash2 } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Eye, EyeOff, Trash2, KeyRound } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { saveApiKey, getApiKey } from '@/lib/actions';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,13 +14,13 @@ import { useAuth } from '@/contexts/AuthContext';
 export default function SettingsPage() {
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [isProcessing, startApiTransition] = useTransition();
   const { toast } = useToast();
   const { user } = useAuth();
 
-  const fetchAndSetApiKey = useCallback(() => {
+  const fetchAndSetApiKey = useCallback(async () => {
     if (!user) return;
-    startTransition(async () => {
+    startApiTransition(async () => {
       try {
         const currentKey = await getApiKey(user.uid);
         if (currentKey) {
@@ -32,13 +32,12 @@ export default function SettingsPage() {
         console.error("Failed to fetch API key:", error);
         toast({
           title: "Error",
-          description: "Could not retrieve current API key setting.",
+          description: "Could not retrieve current API key.",
           variant: "destructive",
         });
       }
     });
   }, [user, toast]);
-
 
   useEffect(() => {
     fetchAndSetApiKey();
@@ -50,7 +49,7 @@ export default function SettingsPage() {
       toast({ title: "Not Authenticated", description: "Please log in to save settings.", variant: "destructive" });
       return;
     }
-    startTransition(async () => {
+    startApiTransition(async () => {
       const result = await saveApiKey(user.uid, apiKeyInput);
       if (result.success) {
         toast({
@@ -59,21 +58,21 @@ export default function SettingsPage() {
         });
       } else {
         toast({
-          title: "Error",
+          title: "Error Saving Key",
           description: result.message,
           variant: "destructive",
         });
       }
     });
   };
-
+  
   const handleClearKey = () => {
     if (!user) {
       toast({ title: "Not Authenticated", description: "Please log in to clear settings.", variant: "destructive" });
       return;
     }
-    startTransition(async () => {
-      const result = await saveApiKey(user.uid, ""); // Pass empty string to clear
+    startApiTransition(async () => {
+      const result = await saveApiKey(user.uid, ""); 
       if (result.success) {
         setApiKeyInput("");
         toast({
@@ -91,27 +90,31 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <Card className="bg-card/70 backdrop-blur-md border-border shadow-xl">
+    <div className="space-y-6 animate-fade-in">
+      <Card className="card-glass">
         <CardHeader>
-          <CardTitle className="font-headline text-3xl flex items-center gap-2">
-            <SettingsIcon size={32} className="text-primary" />
+          <CardTitle className="font-headline text-3xl flex items-center gap-3">
+            <SettingsIcon size={32} className="text-accent" />
             Application Settings
           </CardTitle>
           <CardDescription>
-            Configure your application settings, such as API keys for external services. Your settings are saved per user.
+            Manage API keys for external services like ESV Bible API.
           </CardDescription>
         </CardHeader>
       </Card>
 
-      <Card className="bg-card/70 backdrop-blur-md border-border shadow-lg">
+      <Card className="card-glass">
         <CardHeader>
-          <CardTitle className="font-headline">API Configuration</CardTitle>
+          <CardTitle className="font-headline flex items-center gap-2">
+            <KeyRound className="text-primary" />
+            API Keys
+          </CardTitle>
+          <CardDescription>Your API keys are stored securely and used only for their intended purpose.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6 max-w-md">
             <div className="space-y-2">
-              <Label htmlFor="esv-api-key">ESV Bible API Key</Label>
+              <Label htmlFor="esv-api-key" className="block text-sm font-medium">ESV API Key</Label>
               <div className="flex items-center gap-2">
                 <Input
                   id="esv-api-key"
@@ -119,8 +122,8 @@ export default function SettingsPage() {
                   value={apiKeyInput}
                   onChange={(e) => setApiKeyInput(e.target.value)}
                   placeholder="Enter your ESV API Key"
-                  className="bg-background flex-grow"
-                  disabled={isPending || !user}
+                  className="bg-background/70 dark:bg-input/70 flex-grow"
+                  disabled={isProcessing || !user}
                 />
                 <Button
                   type="button"
@@ -128,28 +131,28 @@ export default function SettingsPage() {
                   size="icon"
                   onClick={() => setShowApiKey(!showApiKey)}
                   aria-label={showApiKey ? "Hide API Key" : "Show API Key"}
-                  disabled={isPending || !user}
+                  disabled={isProcessing || !user}
                 >
                   {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Obtain an API key from the <a href="https://api.esv.org/" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">ESV API website</a>. This key is stored securely.
+              <p className="text-xs text-muted-foreground">
+                Obtain an API key from the <a href="https://api.esv.org/" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">ESV API website</a>.
               </p>
             </div>
             <div className="flex items-center gap-2">
-                <Button type="submit" disabled={isPending || !user} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+              <Button type="submit" disabled={isProcessing || !user} className="bg-accent hover:bg-accent/90 text-accent-foreground">
                 <Save className="mr-2 h-4 w-4" />
-                {isPending ? "Saving..." : "Save API Key"}
+                {isProcessing ? "Saving..." : "Save API Key"}
+              </Button>
+              {apiKeyInput && (
+                <Button type="button" variant="outline" onClick={handleClearKey} disabled={isProcessing || !user} className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/50">
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Clear Key
                 </Button>
-                {apiKeyInput && (
-                    <Button type="button" variant="outline" onClick={handleClearKey} disabled={isPending || !user} className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/50">
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Clear Key
-                    </Button>
-                )}
+              )}
             </div>
-             {!user && <p className="text-sm text-destructive">Please log in to manage API keys.</p>}
+            {!user && <p className="text-sm text-destructive">Please log in to manage API keys.</p>}
           </form>
         </CardContent>
       </Card>

@@ -1,189 +1,303 @@
 
 "use client";
 
-import React, { useState, useEffect, useTransition, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useTransition } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label"; // Ensured import
-import { Checkbox } from "@/components/ui/checkbox";
-import { Music, Settings2, Lightbulb, RotateCcw, Save, FolderOpen, FileDown, FileText } from 'lucide-react';
-import { simplifyChordsAI, saveSongToFirestore, loadSongsFromFirestore } from '@/lib/actions';
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch"; // Changed from Checkbox
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Music, FileText, Download, FileUp, Workflow, TerminalSquare, Eye, Save, FolderOpen, Loader2 } from 'lucide-react';
+import { useDebounce } from '@/hooks/use-debounce';
+import { CustomParserV9, type ParsedSong } from '@/lib/chordpro-parser';
+import { CustomTransposer } from '@/lib/chord-transposer';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Input } from '@/components/ui/input'; // For song title input
+import { saveSongToFirestore, loadSongsFromFirestore } from '@/lib/actions';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const musicalKeys = ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"];
-const initialChordPro = `{title: Amazing Grace}
-{artist: John Newton}
-{key: G}
-{capo: 0}
-{copyright: Public Domain}
 
-{comment: Verse 1}
-[G]Amazing grace! (how [C]sweet the [G]sound)
-That [G]saved a wretch like [D7]me!
-I [G]once was lost, but [C]now am [G]found,
-Was [Em]blind, but [D7]now I [G]see.
-
-{comment: Verse 2}
-'Twas [G]grace that taught my [C]heart to [G]fear,
-And [G]grace my fears re[D7]lieved;
-How [G]precious did that [C]grace ap[G]pear
-The [Em]hour I [D7]first be[G]lieved!`;
-
-interface OutputOptions {
-  showArtist: boolean;
-  showCopyright: boolean;
-  // Add more options here if needed
+interface SongToLoad {
+  id: string;
+  title: string;
+  content: string;
 }
 
-const extractMetadata = (text: string, directive: string): string | null => {
-  const regex = new RegExp(`{(${directive}):\\s*([^}]*)}`, 'i');
-  const match = text.match(regex);
-  return match ? match[2].trim() : null;
+const SongPreview = ({ htmlContent }: { htmlContent: string }) => {
+  if (!htmlContent) {
+    return (
+      <div className="flex items-center justify-center h-full text-center text-muted-foreground">
+        <p>Your formatted song will appear here once you start typing or load a song.</p>
+      </div>
+    );
+  }
+  return (
+    <iframe
+      srcDoc={htmlContent}
+      title="Song Preview"
+      className="w-full h-full bg-white rounded-lg border-none"
+      sandbox="allow-scripts" // Allow scripts if your HTML needs them, otherwise can be more restrictive
+    />
+  );
 };
-
-
-const renderChordPro = (text: string, options: OutputOptions) => {
-  return text.split('\n').map((line, index) => {
-    if (line.startsWith('{title:') || line.startsWith('{t:')) {
-      return <h2 key={index} className="text-2xl font-headline font-semibold my-3 text-primary">{line.substring(line.indexOf(':') + 1).trim()}</h2>;
-    }
-    if (line.startsWith('{subtitle:') || line.startsWith('{st:')) {
-      return <h3 key={index} className="text-xl font-headline font-medium my-2 text-secondary-foreground">{line.substring(line.indexOf(':') + 1).trim()}</h3>;
-    }
-    if ((line.startsWith('{artist:}') || line.startsWith('{a:}')) && options.showArtist) {
-      return <p key={index} className="text-md font-medium my-1 text-muted-foreground">{line.substring(line.indexOf(':') + 1).trim()}</p>;
-    }
-    if ((line.startsWith('{copyright:}') || line.startsWith('{coy:}')) && options.showCopyright) {
-      return <p key={index} className="text-xs my-1 text-muted-foreground italic">&copy; {line.substring(line.indexOf(':') + 1).trim()}</p>;
-    }
-    if (line.startsWith('{key:}')) {
-         return <p key={index} className="text-sm my-1 text-muted-foreground">Key: {line.substring(line.indexOf(':') + 1).trim()}</p>;
-    }
-    if (line.startsWith('{capo:}')) {
-         return <p key={index} className="text-sm my-1 text-muted-foreground">Capo: {line.substring(line.indexOf(':') + 1).trim()}</p>;
-    }
-    if (line.startsWith('{comment:') || line.startsWith('{c:')) {
-      // Don't render lines that are only {comment:} or {c:}
-      const commentContent = line.substring(line.indexOf(':') + 1).trim();
-      if (!commentContent) return null;
-      return <p key={index} className="text-sm text-muted-foreground italic my-1 py-1">{commentContent}</p>;
-    }
-    if (line.trim() === '') {
-      return <div key={index} className="h-2" />;
-    }
-
-    if (line.includes('[')) {
-      const parts = [];
-      let lastIndex = 0;
-      const regex = /\[([^\]]+)\]([^[]*)/g;
-      let match;
-      while ((match = regex.exec(line)) !== null) {
-        if (match.index > lastIndex) {
-          parts.push(<span key={`lyrics-${index}-${lastIndex}`} className="text-foreground">{line.substring(lastIndex, match.index)}</span>);
-        }
-        parts.push(
-          <span key={`chord-${index}-${match.index}`} className="relative inline-block h-0">
-            <span className="absolute bottom-0 left-0 transform -translate-y-full font-bold text-accent px-0.5 text-sm whitespace-nowrap">
-              {match[1]}
-            </span>
-          </span>
-        );
-        parts.push(<span key={`lyrics-after-${index}-${match.index}`} className="text-foreground">{match[2]}</span>);
-        lastIndex = match.index + match[0].length;
-      }
-      if (lastIndex < line.length) {
-        parts.push(<span key={`lyrics-remaining-${index}-${lastIndex}`} className="text-foreground">{line.substring(lastIndex)}</span>);
-      }
-      return <p key={index} className="mb-6 leading-normal pt-4 text-base">{parts}</p>;
-    }
-    
-    // Filter out empty directive lines like {artist:}, {copyright:} if those options are off
-    if ((line.startsWith('{artist:}') || line.startsWith('{a:}')) && !options.showArtist) return null;
-    if ((line.startsWith('{copyright:}') || line.startsWith('{coy:}')) && !options.showCopyright) return null;
-    // Filter out other known directives that might be empty if not handled above
-    if (line.match(/^\{[^:]+:\s*\}$/)) return null;
-
-
-    return <p key={index} className="mb-1 leading-normal text-base text-foreground">{line}</p>;
-  }).filter(Boolean); // Filter out nulls from hidden directives
-};
-
 
 export default function ChordProPage() {
-  const [chordProInput, setChordProInput] = useState(initialChordPro);
-  const [originalInput, setOriginalInput] = useState(initialChordPro);
-  const [currentKey, setCurrentKey] = useState("G");
-  const [songTitle, setSongTitle] = useState(extractMetadata(initialChordPro, "title") || "Untitled Song");
+  const [chordProInput, setChordProInput] = useState('');
+  const [targetKey, setTargetKey] = useState('C');
+  const [simplifyChords, setSimplifyChords] = useState(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [songTitleForSave, setSongTitleForSave] = useState("Untitled Song");
+
+  const [showArtist, setShowArtist] = useState(true);
+  const [showCcli, setShowCcli] = useState(true);
+  const [showCopyright, setShowCopyright] = useState(true);
+
+  const [parsedSong, setParsedSong] = useState<ParsedSong | null>(null);
+  const [log, setLog] = useState<string[]>([]);
   
-  const [outputOptions, setOutputOptions] = useState<OutputOptions>({
-    showArtist: true,
-    showCopyright: true,
-  });
-  
-  const [isSimplifying, startSimplifyTransition] = useTransition();
-  const [isSaving, startSavingTransition] = useTransition();
-  const [isLoading, startLoadingTransition] = useTransition();
+  const debouncedChordProInput = useDebounce(chordProInput, 500);
+
   const { user } = useAuth();
   const { toast } = useToast();
+  const [isSaving, startSavingTransition] = useTransition();
+  const [isLoadingSongs, startLoadingSongsTransition] = useTransition();
+  const [availableSongs, setAvailableSongs] = useState<SongToLoad[]>([]);
+  const [isLoadSongDialogOpen, setIsLoadSongDialogOpen] = useState(false);
+
+  const addLog = (message: string, data?: any) => {
+    const timestamp = new Date().toLocaleTimeString();
+    let logMessage = `[${timestamp}] ${message}`;
+    if (data) {
+      try {
+        logMessage += `\n${JSON.stringify(data, null, 2)}`;
+      } catch (e) {
+        logMessage += `\n[Error serializing data for log]`;
+      }
+    }
+    setLog(prev => [logMessage, ...prev.slice(0, 99)]);
+  };
 
   useEffect(() => {
-    // Update song title from ChordPro input if it changes
-    const titleFromInput = extractMetadata(chordProInput, "title");
-    if (titleFromInput && titleFromInput !== songTitle) {
-      setSongTitle(titleFromInput);
+    setLog([]);
+    addLog("--- AUTO-PARSING (V9) ---");
+    if (!debouncedChordProInput) {
+      addLog("Input is empty. Clearing song.");
+      setParsedSong(null);
+      setSongTitleForSave("Untitled Song");
+      return;
     }
-  }, [chordProInput, songTitle]);
-
-  const renderedContent = useMemo(() => renderChordPro(chordProInput, outputOptions), [chordProInput, outputOptions]);
-
-  const handleSimplifyChords = async () => {
-    setOriginalInput(chordProInput);
-    startSimplifyTransition(async () => {
-      try {
-        const result = await simplifyChordsAI(chordProInput, currentKey);
-        setChordProInput(result);
-        toast({
-          title: "Chords Simplified",
-          description: "AI has provided a simplified version. You can revert if needed.",
-        });
-      } catch (error) {
-        console.error("Error simplifying chords:", error);
-        toast({
-          title: "Simplification Error",
-          description: (error as Error).message || "Could not simplify chords at this time.",
-          variant: "destructive",
-        });
+    addLog("Raw Input Length:", debouncedChordProInput.length);
+    try {
+      const song = CustomParserV9.parse(debouncedChordProInput);
+      setParsedSong(song);
+      setSongTitleForSave(song.title || "Untitled Song");
+      addLog("Parsed Song Object:", {title: song.title, artist: song.artist, key: song.key, metaCount: Object.keys(song.meta).length, bodyLines: song.body.length});
+      const originalKey = song.key;
+      if (originalKey && musicalKeys.includes(originalKey)) {
+        setTargetKey(originalKey);
+        addLog(`Successfully parsed song. Detected and set key: ${originalKey}.`);
+      } else {
+        addLog(`Successfully parsed song. Key: ${originalKey || 'Not Found'}. Defaulting/keeping target key: C.`);
+        setTargetKey('C'); // Default if key is not found or invalid
       }
-    });
+    } catch (e: any) {
+      addLog(`FATAL ERROR: ${e.message}`);
+      setParsedSong(null);
+      setSongTitleForSave("Untitled Song");
+    }
+  }, [debouncedChordProInput]);
+
+  const processedSong = useMemo(() => {
+    if (!parsedSong) return null;
+    addLog("--- RE-PROCESSING SONG ---");
+    addLog("Settings:", { targetKey });
+    
+    const originalKey = parsedSong.key || 'C';
+    const notes: Record<string, number> = { 'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11 };
+    
+    const originalRoot = originalKey.replace(/m$/, ''); // Handle minor keys by taking root
+    const targetRoot = targetKey.replace(/m$/, '');
+    
+    let interval = 0;
+    if ((originalRoot in notes) && (targetRoot in notes)) {
+      interval = notes[targetRoot] - notes[originalRoot];
+      addLog(`Transposing from ${originalKey} to ${targetKey} (Interval: ${interval}).`);
+    } else {
+      addLog(`Could not determine interval. Original: ${originalKey}, Target: ${targetKey}. No transposition.`);
+    }
+
+    return {
+      ...parsedSong,
+      key: targetKey, // Display the target key
+      body: parsedSong.body.map(line => {
+        if (line.type !== 'lyrics' || !line.items) return line;
+        return {
+          ...line,
+          items: line.items.map(item => ({
+            ...item,
+            chord: CustomTransposer.transpose(item.chord, interval),
+          }))
+        };
+      }).filter(Boolean)
+    };
+  }, [parsedSong, targetKey]);
+
+  const simplifyChordDisplay = (chord: string | null): string => {
+    if (!chord || !simplifyChords) return chord || '';
+    const rootMatch = chord.match(/^[A-G][#b]?/);
+    if (!rootMatch) return chord;
+    const root = rootMatch[0];
+    const restOfChord = chord.substring(root.length);
+    
+    // Common simplifications: m7->m, maj7->"", 7->"", sus->"", add9->"" etc.
+    if (restOfChord.startsWith('m')) { // Covers m, m7, m9, m11, m6 etc. -> m
+        return root + 'm';
+    }
+    // For major-type chords (maj7, 7, 6, add9, sus), simplify to root.
+    // This is a basic simplification, more nuanced logic could be added.
+    return root;
   };
 
-  const handleRevertChords = () => {
-    setChordProInput(originalInput);
-    toast({
-      title: "Chords Reverted",
-      description: "Reverted to the version before simplification.",
+  const processedSongHtml = useMemo(() => {
+    if (!processedSong) return '';
+    addLog("--- RE-GENERATING HTML ---");
+    const songToFormat = processedSong;
+    let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${songToFormat.title}</title><link href="https://fonts.googleapis.com/css2?family=Fira+Mono&family=Geist+Sans:wght@700&display=swap" rel="stylesheet"><style>body{font-family:'Geist Sans','Verdana',sans-serif;margin:2em;font-weight:bold;}.cpro{width:100%;}h1{font-size:16pt;text-align:center;}.meta-info{font-size:16pt;text-align:center;margin-bottom:2em;}.line-pair{margin-bottom:.8em;}.chord-line,.lyric-line{font-family:'Fira Mono','Courier New',monospace;font-size:14pt;white-space:pre;line-height:1.2;}.chord-line{color:#FF8C00; /* Accent Orange */}.section{font-weight:bold;margin-top:1.2em;margin-bottom:.25em;font-size:14pt;}.comment{font-style:italic;color:#666;margin-bottom:.5em;font-size:14pt;}.chorus-block{padding-left:20px;border-left:2px solid #ccc;margin-left:5px;margin-top:.5em;margin-bottom:.5em;}.footer{font-size:9pt;color:#888;margin-top:3em;text-align:center;}</style></head><body><div class="cpro"><h1>${songToFormat.title}</h1><div class="meta-info">`;
+    if (showArtist && songToFormat.artist) html += `Artist: ${songToFormat.artist}<br/>`;
+    html += `Key: ${songToFormat.key}<br/>`;
+    html += `</div>`;
+    songToFormat.body.forEach(line => {
+        if (line.type === 'section') { html += `<div class="section">${line.content}</div>`; }
+        else if (line.type === 'comment') { html += `<div class="comment">${line.content}</div>`; }
+        else if (line.type === 'chorus_start') { html += `<div class="chorus-block">`; }
+        else if (line.type === 'chorus_end') { html += `</div>`; }
+        else if (line.type === 'lyrics' && line.items) {
+            if (line.items.length === 0) { html += `<br>`; return; }
+            let chordLine = '';
+            let lyricLine = '';
+            line.items.forEach(item => {
+                const chord = simplifyChordDisplay(item.chord);
+                const lyrics = item.lyrics || '';
+                if (chord) {
+                    chordLine += chord;
+                    const padding = Math.max(0, lyrics.length - chord.length);
+                    chordLine += ' '.repeat(padding);
+                } else { chordLine += ' '.repeat(lyrics.length); }
+                lyricLine += lyrics;
+            });
+            html += `<div class="line-pair"><div class="chord-line">${chordLine}</div><div class="lyric-line">${lyricLine}</div></div>`;
+        }
     });
+    const footerMeta = songToFormat.meta || {};
+    if (showCcli && footerMeta.ccli) { html += `<div class="footer">CCLI Song #${footerMeta.ccli}</div>`; }
+    if (showCopyright && footerMeta.copyright) { html += `<div class="footer">${footerMeta.copyright}</div>`; }
+    if (showCopyright && footerMeta.footer) { html += `<div class="footer">${footerMeta.footer}</div>`; }
+    html += `</div></body></html>`;
+    return html;
+  }, [processedSong, simplifyChords, showArtist, showCcli, showCopyright]);
+
+  const generateRtfContent = () => {
+    if (!processedSong) return null;
+    addLog("--- GENERATING RTF ---");
+    const rtfEscape = (str: string | undefined) => String(str || '').replace(/\\/g, '\\\\').replace(/{/g, '\\{').replace(/}/g, '\\}');
+    let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}{\\f1 Courier New;}}{\\colortbl;\\red255\\green140\\blue0;}`; // Orange color for chords
+    rtf += `{\\pard\\qc\\sa200\\sl276\\slmult1\\b\\f0\\fs32 ${rtfEscape(processedSong.title)}\\par}`;
+    if (showArtist && processedSong.artist) { rtf += `{\\pard\\qc\\b0\\fs24 Artist: ${rtfEscape(processedSong.artist)}\\par}`; }
+    rtf += `{\\pard\\qc\\b0\\fs24 Key: ${rtfEscape(processedSong.key)}\\par}\\par`;
+    
+    processedSong.body.forEach(line => {
+        if (line.type === 'section') { rtf += `{\\pard\\sa200\\sl276\\slmult1\\b\\f0\\fs24 ${rtfEscape(line.content)}\\par}`; }
+        else if (line.type === 'comment') { rtf += `{\\pard\\sa200\\sl276\\slmult1\\i\\f0\\fs24 ${rtfEscape(line.content)}\\par}`; }
+        else if (line.type === 'chorus_start') { rtf += `{\\pard\\li720\\sa100\\sl276\\slmult1 `; } // Indent chorus
+        else if (line.type === 'chorus_end') { rtf += `\\par}`; } // End chorus indent
+        else if (line.type === 'lyrics' && line.items) {
+            if (line.items.length === 0) { rtf += `{\\pard\\sa200\\sl276\\slmult1\\fs24 \\par}`; return; }
+            
+            let chordsRtf = '';
+            let lyricsRtf = '';
+            line.items.forEach(item => {
+                const chord = simplifyChordDisplay(item.chord);
+                const lyrics = item.lyrics || ' '; 
+                chordsRtf += `{\\cf1\\b\\f1 ${rtfEscape(chord)}}{${' '.repeat(Math.max(0,lyrics.length - (chord||'').length))}}`;
+                lyricsRtf += rtfEscape(lyrics);
+            });
+
+            if(line.type !== 'chorus_start') rtf += `{\\pard\\sa100\\sl276\\slmult1 `; // Reset paragraph for non-chorus lines
+            rtf += `{\\pard\\sa100\\sl276\\slmult1\\f1\\fs24 ${chordsRtf}\\par}`;
+            rtf += `{\\pard\\sa200\\sl276\\slmult1\\f0\\fs24 ${lyricsRtf}\\par}`;
+            if(line.type !== 'chorus_start') rtf += `}`;
+        }
+    });
+    rtf += `{\\pard\\qc\\sa200\\sl276\\slmult1\\fs18 `;
+    const footerMeta = processedSong.meta || {};
+    if (showCcli && footerMeta.ccli) { rtf += `CCLI Song #${rtfEscape(footerMeta.ccli)} `; }
+    if (showCopyright && footerMeta.copyright) { rtf += rtfEscape(footerMeta.copyright); }
+    if (showCopyright && footerMeta.footer) { rtf += `\\par ${rtfEscape(footerMeta.footer)}`; }
+    rtf += `\\par}}`;
+    return rtf;
   };
   
-  const handleTranspose = (newKey: string) => {
-    setCurrentKey(newKey);
-    toast({
-      title: "Key Changed (Placeholder)",
-      description: `Key set to ${newKey}. Actual transposition logic not yet implemented. This key is used as context for AI simplification.`,
-    });
+  const createAndDownloadBlob = (content: string | null, type: string, extension: string) => {
+    if (!content) {
+        addLog(`${extension.toUpperCase()} EXPORT FAILED: No content to export.`); 
+        toast({ title: "Export Failed", description: "No content to export.", variant: "destructive"});
+        return;
+    }
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeTitle = (processedSong?.title || "song").replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    a.download = `${safeTitle}_${targetKey}.${extension}`;
+    a.href = url;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    addLog(`${extension.toUpperCase()} file downloaded successfully.`);
+    toast({ title: "Export Successful", description: `${extension.toUpperCase()} file downloaded.`});
   };
 
-  const handleExportHTML = () => {
-    toast({ title: "Export HTML (Placeholder)", description: "This feature will be implemented soon." });
+  const handleExportHtml = () => createAndDownloadBlob(processedSongHtml, 'text/html', 'html');
+  const handleExportRtf = () => createAndDownloadBlob(generateRtfContent(), 'application/rtf', 'rtf');
+  const handleFileImportClick = () => fileInputRef.current?.click();
+  
+  const handleFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+        setLog([]);
+        addLog(`Importing file: ${file.name}`);
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const fileContent = e.target?.result as string;
+            setChordProInput(fileContent);
+            // setParsedSong(null); // Debounce will handle re-parsing
+            addLog("File content loaded. Auto-parsing will begin shortly.");
+        };
+        reader.onerror = (e) => {
+          addLog(`ERROR: Failed to read file: ${e.target?.error?.message}`);
+          toast({ title: "File Read Error", description: `Could not read file: ${e.target?.error?.message}`, variant: "destructive"});
+        }
+        reader.readAsText(file);
+    }
+    if(fileInputRef.current) fileInputRef.current.value = ""; // Reset file input
   };
 
-  const handleExportRTF = () => {
-    toast({ title: "Export RTF (Placeholder)", description: "This feature will be implemented soon." });
+  const handleDownloadLog = () => {
+    addLog("Downloading debug log.");
+    const logContent = log.slice().reverse().join('\n\n');
+    createAndDownloadBlob(logContent, 'text/plain', 'txt');
   };
 
   const handleSaveSong = async () => {
@@ -191,36 +305,35 @@ export default function ChordProPage() {
       toast({ title: "Not Authenticated", description: "Please log in to save songs.", variant: "destructive" });
       return;
     }
-    if (!songTitle.trim()) {
+    if (!chordProInput.trim()) {
+      toast({ title: "Cannot Save", description: "Song content is empty.", variant: "destructive" });
+      return;
+    }
+     if (!songTitleForSave.trim()) {
       toast({ title: "Cannot Save", description: "Please provide a song title.", variant: "destructive" });
       return;
     }
     startSavingTransition(async () => {
-      const result = await saveSongToFirestore(user.uid, songTitle, chordProInput);
+      const result = await saveSongToFirestore(user.uid, songTitleForSave, chordProInput);
       if (result.success) {
-        toast({ title: "Song Saved", description: `'${songTitle}' has been saved successfully.` });
+        toast({ title: "Song Saved", description: `'${songTitleForSave}' has been saved successfully.` });
       } else {
         toast({ title: "Save Failed", description: result.message, variant: "destructive" });
       }
     });
   };
 
-  const handleLoadSongs = async () => {
+  const handleOpenLoadSongDialog = async () => {
      if (!user) {
       toast({ title: "Not Authenticated", description: "Please log in to load songs.", variant: "destructive" });
       return;
     }
-    startLoadingTransition(async () => {
+    startLoadingSongsTransition(async () => {
       const result = await loadSongsFromFirestore(user.uid);
       if (result.success && result.songs) {
-        // For now, just log. In future, show a dialog to select a song.
-        console.log("Loaded songs:", result.songs);
         if (result.songs.length > 0) {
-          // Example: load the first song
-          // setChordProInput(result.songs[0].content);
-          // setSongTitle(result.songs[0].title);
-          // setOriginalInput(result.songs[0].content);
-          toast({ title: "Songs Loaded (Placeholder)", description: `${result.songs.length} songs found. Check console. UI to select a song coming soon.` });
+          setAvailableSongs(result.songs);
+          setIsLoadSongDialogOpen(true);
         } else {
           toast({ title: "No Saved Songs", description: "You haven't saved any songs yet." });
         }
@@ -230,129 +343,166 @@ export default function ChordProPage() {
     });
   };
 
-  return (
-    <div className="space-y-6">
-      <Card className="bg-card/70 backdrop-blur-md border-border shadow-xl">
-        <CardHeader>
-          <CardTitle className="font-headline text-3xl flex items-center gap-2">
-            <Music size={32} className="text-primary" />
-            ChordPro Editor & Viewer
-          </CardTitle>
-          <CardDescription>
-            Enter ChordPro text, manage songs, and use AI to suggest simplified chords.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+  const handleLoadSelectedSong = (song: SongToLoad) => {
+    setChordProInput(song.content);
+    setSongTitleForSave(song.title);
+    // Parsing will be handled by useEffect on debouncedChordProInput
+    toast({ title: "Song Loaded", description: `'${song.title}' has been loaded.`});
+    setIsLoadSongDialogOpen(false);
+  };
 
-      <div className="grid md:grid-cols-2 gap-6">
-        <Card className="bg-card/70 backdrop-blur-md border-border shadow-lg">
-          <CardHeader>
-            <CardTitle className="font-headline flex items-center gap-2"><Settings2 />Controls & Input</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="song-title" className="block text-sm font-medium mb-1">Song Title</Label>
-              <Input 
-                id="song-title"
-                value={songTitle}
-                onChange={(e) => setSongTitle(e.target.value)}
-                placeholder="Enter song title"
-                className="font-semibold bg-background focus:ring-primary focus:border-primary"
-              />
-            </div>
-            <div>
-              <Label htmlFor="chordpro-input" className="block text-sm font-medium mb-1">ChordPro Input</Label>
-              <Textarea
-                id="chordpro-input"
-                value={chordProInput}
-                onChange={(e) => {
-                  setChordProInput(e.target.value);
-                  setOriginalInput(e.target.value);
-                }}
-                rows={12}
-                className="font-mono text-xs p-3 border-input bg-background focus:ring-primary focus:border-primary leading-relaxed"
-                placeholder="Enter ChordPro text here..."
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="key-transposer" className="block text-sm font-medium mb-1">Current Key (for AI context)</Label>
-                <Select value={currentKey} onValueChange={handleTranspose}>
-                  <SelectTrigger id="key-transposer" className="w-full bg-background">
-                    <SelectValue placeholder="Select key" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {musicalKeys.map(key => (
-                      <SelectItem key={key} value={key}>{key}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+        <CardTitle className="font-headline text-3xl flex items-center gap-3">
+          <Music size={32} className="text-accent" /> ChordPro Editor
+        </CardTitle>
+        <div className="flex gap-2 flex-wrap">
+          <Button onClick={handleExportRtf} variant="outline" disabled={!processedSong}>
+            <FileText className="mr-2" /> Export RTF
+          </Button>
+          <Button onClick={handleExportHtml} variant="outline" disabled={!processedSong}>
+            <Download className="mr-2" /> Export HTML
+          </Button>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-6">
+          <Card className="card-glass">
+            <CardHeader className="flex flex-row justify-between items-center">
+              <CardTitle className="font-headline flex items-center gap-2"><FileText size={22}/>1. Edit Song</CardTitle>
+              <Input type="file" ref={fileInputRef} onChange={handleFileSelected} className="hidden" accept=".pro,.cho,.chordpro,.txt,text/plain" />
+              <Button onClick={handleFileImportClick} variant="outline" size="sm">
+                <FileUp className="mr-2 h-4 w-4" /> Import File
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4">
+                <Label htmlFor="song-title-save">Song Title (for saving)</Label>
+                <Input 
+                  id="song-title-save"
+                  value={songTitleForSave}
+                  onChange={(e) => setSongTitleForSave(e.target.value)}
+                  placeholder="Enter song title"
+                  className="bg-background/70 dark:bg-input/70 mt-1"
+                  disabled={!chordProInput.trim()}
+                />
               </div>
-              <div className="space-y-2">
-                 <Button onClick={handleSimplifyChords} disabled={isSimplifying} className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">
-                  <Lightbulb className="mr-2 h-4 w-4" />
-                  {isSimplifying ? "Simplifying..." : "Simplify Chords (AI)"}
-                </Button>
-                <Button onClick={handleRevertChords} variant="outline" className="w-full" disabled={chordProInput === originalInput}>
-                  <RotateCcw className="mr-2 h-4 w-4" />
-                  Revert Simplification
-                </Button>
-              </div>
-            </div>
-             <div className="space-y-3 pt-2">
-                <Label className="block text-sm font-medium">Output Options</Label>
-                <div className="flex items-center space-x-2">
-                    <Checkbox 
-                        id="showArtist" 
-                        checked={outputOptions.showArtist} 
-                        onCheckedChange={(checked) => setOutputOptions(prev => ({...prev, showArtist: !!checked}))}
-                    />
-                    <Label htmlFor="showArtist" className="text-sm font-normal">Show Artist</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                    <Checkbox 
-                        id="showCopyright"
-                        checked={outputOptions.showCopyright}
-                        onCheckedChange={(checked) => setOutputOptions(prev => ({...prev, showCopyright: !!checked}))}
-                    />
-                    <Label htmlFor="showCopyright" className="text-sm font-normal">Show Copyright</Label>
-                </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2 pt-2">
-                <Button onClick={handleSaveSong} disabled={isSaving || !user} className="w-full">
+              <Textarea 
+                value={chordProInput} 
+                onChange={(e) => setChordProInput(e.target.value)}
+                className="h-64 bg-background/70 dark:bg-input/70 font-code text-sm placeholder:text-muted-foreground"
+                placeholder="{title: My Song}\n{artist: Anon}\n{key: G}\n\n[G]Amazing [C]grace..." 
+              />
+              <div className="mt-4 flex gap-2">
+                <Button onClick={handleSaveSong} disabled={isSaving || !user || !chordProInput.trim()} className="bg-primary hover:bg-primary/90 text-primary-foreground">
                   <Save className="mr-2 h-4 w-4" />
                   {isSaving ? "Saving..." : "Save Song"}
                 </Button>
-                <Button onClick={handleLoadSongs} variant="outline" disabled={isLoading || !user} className="w-full">
-                  <FolderOpen className="mr-2 h-4 w-4" />
-                  {isLoading ? "Loading..." : "Load Songs"}
-                </Button>
-                 <Button onClick={handleExportHTML} variant="outline" className="w-full">
-                  <FileDown className="mr-2 h-4 w-4" />
-                  Export HTML
-                </Button>
-                <Button onClick={handleExportRTF} variant="outline" className="w-full">
-                  <FileText className="mr-2 h-4 w-4" />
-                  Export RTF
-                </Button>
+                <AlertDialog open={isLoadSongDialogOpen} onOpenChange={setIsLoadSongDialogOpen}>
+                    <AlertDialogTrigger asChild>
+                        <Button onClick={handleOpenLoadSongDialog} variant="outline" disabled={isLoadingSongs || !user}>
+                            <FolderOpen className="mr-2 h-4 w-4" />
+                            {isLoadingSongs ? "Loading..." : "Load Song"}
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                        <AlertDialogTitle>Load Saved Song</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Select a song to load into the editor. This will replace current content.
+                        </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <ScrollArea className="h-60 w-full my-4">
+                            {availableSongs.length > 0 ? (
+                                <div className="space-y-2 pr-4">
+                                {availableSongs.map(song => (
+                                    <Button key={song.id} variant="ghost" className="w-full justify-start" onClick={() => handleLoadSelectedSong(song)}>
+                                    {song.title}
+                                    </Button>
+                                ))}
+                                </div>
+                            ) : (
+                                <p className="text-muted-foreground text-center">No songs found.</p>
+                            )}
+                        </ScrollArea>
+                        <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className={`card-glass ${!parsedSong ? 'opacity-60 pointer-events-none' : ''}`}>
+            <CardHeader>
+              <CardTitle className="font-headline flex items-center gap-2"><Workflow size={22} />2. Process & Format</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <Label htmlFor="key-select" className="block text-sm font-medium mb-1">Transpose to Key</Label>
+                <Select value={targetKey} onValueChange={setTargetKey} disabled={!parsedSong}>
+                  <SelectTrigger id="key-select" className="w-full bg-background/70 dark:bg-input/70">
+                    <SelectValue placeholder="Select key" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {musicalKeys.map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="simplify-switch" className="font-medium">Simplify advanced chords?</Label>
+                <Switch id="simplify-switch" checked={simplifyChords} onCheckedChange={setSimplifyChords} disabled={!parsedSong} />
+              </div>
+              <div className="border-t border-border pt-4 mt-4">
+                <h4 className="text-lg font-semibold mb-3">Output Options</h4>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="show-artist-switch">Show Artist Info</Label>
+                    <Switch id="show-artist-switch" checked={showArtist} onCheckedChange={setShowArtist} disabled={!parsedSong}/>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="show-ccli-switch">Show CCLI#</Label>
+                    <Switch id="show-ccli-switch" checked={showCcli} onCheckedChange={setShowCcli} disabled={!parsedSong}/>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="show-copyright-switch">Show Copyright/Footer</Label>
+                    <Switch id="show-copyright-switch" checked={showCopyright} onCheckedChange={setShowCopyright} disabled={!parsedSong}/>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+        <Card className="card-glass lg:h-full flex flex-col">
+          <CardHeader>
+            <CardTitle className="font-headline flex items-center gap-2"><Eye size={22}/>3. Live Preview</CardTitle>
+          </CardHeader>
+          <CardContent className="flex-grow">
+            <div className="h-[calc(100vh-28rem)] min-h-[300px] lg:h-full bg-black/5 dark:bg-black/20 rounded-lg p-1 border border-input">
+              <SongPreview htmlContent={processedSongHtml} />
             </div>
           </CardContent>
         </Card>
-
-        <Card className="bg-card/70 backdrop-blur-md border-border shadow-lg">
-          <CardHeader>
-            <CardTitle className="font-headline">ChordPro Preview</CardTitle>
-            <CardDescription>Displaying content for key: {currentKey} (transposition visual only)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-[520px] w-full p-4 rounded-md border border-input bg-white dark:bg-muted/20">
-              <div className="max-w-none">
-                 {renderedContent.length > 0 ? renderedContent : <p className="text-muted-foreground">Enter ChordPro text to see a preview.</p>}
-              </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
       </div>
+      <Card className="card-glass">
+        <CardHeader className="flex flex-row justify-between items-center">
+            <CardTitle className="font-headline flex items-center gap-2"><TerminalSquare size={22}/>Debug Log</CardTitle>
+            <Button onClick={handleDownloadLog} variant="outline" size="sm" disabled={log.length === 0}>
+              <Download className="mr-2 h-4 w-4"/> Download Log
+            </Button>
+        </CardHeader>
+        <CardContent>
+          <ScrollArea className="h-48 w-full">
+            <Textarea
+              readOnly
+              value={log.join('\n\n')}
+              className="h-full bg-black/5 dark:bg-black/20 rounded-lg text-foreground/80 font-code text-xs focus-visible:ring-0 focus-visible:ring-offset-0 border-none"
+              placeholder="Actions will be logged here..."
+            />
+          </ScrollArea>
+        </CardContent>
+      </Card>
     </div>
   );
 }

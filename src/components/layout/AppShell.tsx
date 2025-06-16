@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Music2, BookOpenText, Settings, Menu, LogOut, UserCircle } from "lucide-react";
+import { Music, BookOpenText, Settings, Menu, LogOut, UserCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   SidebarProvider,
@@ -15,7 +15,6 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarTrigger,
-  SidebarInset,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -31,18 +30,16 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
-
 const navItems = [
-  { href: "/", label: "ChordPro Suite", icon: Music2, protected: true },
-  { href: "/scripture", label: "Scripture Lookup", icon: BookOpenText, protected: true },
+  { href: "/", label: "ChordPro Importer", icon: Music, protected: true },
+  { href: "/scripture", label: "Sermon Builder", icon: BookOpenText, protected: true },
   { href: "/settings", label: "Settings", icon: Settings, protected: true },
 ];
 
 const Logo = () => (
-  <svg width="32" height="32" viewBox="0 0 100 100" className="text-primary" fill="currentColor">
-    <rect width="100" height="100" rx="20" fill="hsl(var(--primary-foreground))" />
-    <path d="M30 70 L30 30 L50 30 Q65 30 65 40 Q65 50 50 50 L40 50 M40 50 L70 50 L70 70 L50 70 Q35 70 35 60 Q35 50 50 50" stroke="hsl(var(--primary))" strokeWidth="10" fill="none" />
-  </svg>
+  <div className="p-1.5 bg-accent rounded-lg">
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="hsl(var(--accent-foreground))" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+  </div>
 );
 
 
@@ -63,40 +60,37 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // If loading, or if no user and on a protected route that isn't login/signup, show nothing or a loader.
-  // AuthContext already handles a global loader and redirection.
-  // This check is to prevent rendering the shell if user is not authenticated and on a protected page.
   const isAuthPage = pathname === '/login' || pathname === '/signup';
-  if (!loading && !user && !isAuthPage) {
-     // AuthProvider will redirect, so we can return null or a minimal loader here to avoid flicker
-    return null; 
-  }
   
-  // If user is logged in but on login/signup page, redirect to home
   React.useEffect(() => {
+    if (!loading && !user && !isAuthPage) {
+      // AuthProvider handles redirection, this is an additional safeguard
+      // or can be removed if AuthProvider's redirection is sufficient.
+    }
     if (!loading && user && isAuthPage) {
       router.push('/');
     }
-  }, [user, loading, isAuthPage, router]);
+  }, [user, loading, isAuthPage, router, pathname]);
 
-
-  // Don't render AppShell for login/signup pages
   if (isAuthPage) {
-    return <>{children}</>;
+    return <div className="min-h-screen bg-background">{children}</div>;
   }
   
-  // If loading and not an auth page, AppShell might render briefly.
-  // AuthProvider's loader should cover most cases.
-  // If user is definitively not logged in and not on an auth page, this component might not even mount due to AuthProvider's redirect.
+  // AuthProvider shows a global loader, so this shell won't render until auth state is resolved.
+  // If still loading but not an auth page, or no user and not an auth page,
+  // AuthProvider's logic should prevent rendering this shell until redirection or user is confirmed.
+  if (loading || (!user && !isAuthPage)) {
+     return null; // Or a minimal shell loader if preferred, but AuthProvider handles global loading.
+  }
 
   return (
     <SidebarProvider defaultOpen={true}>
-      <Sidebar className="hidden md:block border-r border-sidebar-border">
+      <Sidebar className="hidden md:block border-r border-sidebar-border bg-sidebar">
         <SidebarHeader className="p-4">
           <Link href="/" className="flex items-center gap-3">
             <Logo />
             <h1 className="text-2xl font-headline font-bold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
-              CCC Suite
+              CCC <span className="text-accent group-data-[collapsible=icon]:hidden">Suite</span>
             </h1>
           </Link>
         </SidebarHeader>
@@ -108,7 +102,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   asChild
                   isActive={pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href))}
                   tooltip={{ children: item.label, className: "font-body" }}
-                  className="font-body text-base"
+                  className="font-body text-base text-sidebar-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground hover:bg-sidebar-accent/80 hover:text-sidebar-accent-foreground"
                 >
                   <Link href={item.href}>
                     <item.icon size={20}/>
@@ -122,7 +116,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <SidebarFooter className="p-4 mt-auto border-t border-sidebar-border">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="flex items-center justify-start gap-3 w-full p-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0">
+              <Button variant="ghost" className="flex items-center justify-start gap-3 w-full p-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0 text-sidebar-foreground hover:bg-sidebar-accent/80 hover:text-sidebar-accent-foreground">
                 <Avatar className="h-9 w-9">
                   {user?.photoURL ? <AvatarImage src={user.photoURL} alt="User Avatar" /> : <AvatarFallback><UserCircle size={20}/></AvatarFallback>}
                 </Avatar>
@@ -132,11 +126,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 </div>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent side="top" align="start" className="w-56 font-body mb-2">
+            <DropdownMenuContent side="top" align="start" className="w-56 font-body mb-2 bg-popover text-popover-foreground">
               <DropdownMenuLabel>{user?.displayName || user?.email}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem disabled>Profile (soon)</DropdownMenuItem>
-              <DropdownMenuItem onClick={handleLogout} className="text-red-500 focus:bg-red-500/10 focus:text-red-600">
+              <DropdownMenuItem onClick={handleLogout} className="text-red-500 focus:bg-red-500/10 focus:text-red-600 dark:text-red-400 dark:focus:bg-red-400/10 dark:focus:text-red-300">
                 <LogOut className="mr-2 h-4 w-4" />
                 Log out
               </DropdownMenuItem>
@@ -145,7 +139,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </SidebarFooter>
       </Sidebar>
       
-      <div className="flex flex-col md:pl-[var(--sidebar-width)] group-data-[collapsible=icon]:md:pl-[var(--sidebar-width-icon)] transition-[padding-left] duration-200 ease-linear">
+      <div className="flex flex-col md:pl-[var(--sidebar-width)] group-data-[collapsible=icon]:md:pl-[var(--sidebar-width-icon)] transition-[padding-left] duration-200 ease-linear bg-background">
          <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b bg-background/80 px-4 backdrop-blur-md md:justify-end">
             <div className="md:hidden">
                 <Sheet>
@@ -155,12 +149,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                             <span className="sr-only">Toggle navigation menu</span>
                         </Button>
                     </SheetTrigger>
-                    <SheetContent side="left" className="flex flex-col p-0 w-72">
-                        <SidebarHeader className="p-4 border-b">
+                    <SheetContent side="left" className="flex flex-col p-0 w-72 bg-sidebar text-sidebar-foreground">
+                        <SidebarHeader className="p-4 border-b border-sidebar-border">
                              <Link href="/" className="flex items-center gap-3">
                                 <Logo />
                                 <h1 className="text-xl font-headline font-bold text-sidebar-foreground">
-                                CCC Suite
+                                CCC <span className="text-accent">Suite</span>
                                 </h1>
                             </Link>
                         </SidebarHeader>
@@ -171,8 +165,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                                 key={item.href}
                                 href={item.href}
                                 className={cn(
-                                "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary",
-                                (pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href))) && "bg-muted text-primary"
+                                "flex items-center gap-3 rounded-lg px-3 py-2 text-sidebar-foreground transition-all hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/80",
+                                (pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href))) && "bg-sidebar-accent text-sidebar-accent-foreground"
                                 )}
                             >
                                 <item.icon className="h-5 w-5" />
@@ -181,8 +175,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                             ))}
                         </nav>
                         </SidebarContent>
-                         <SidebarFooter className="p-4 mt-auto border-t">
-                            <Button variant="ghost" className="flex items-center justify-start gap-3 w-full p-2">
+                         <SidebarFooter className="p-4 mt-auto border-t border-sidebar-border">
+                            <Button variant="ghost" className="flex items-center justify-start gap-3 w-full p-2 text-sidebar-foreground hover:bg-sidebar-accent/80 hover:text-sidebar-accent-foreground">
                                 <Avatar className="h-9 w-9">
                                   {user?.photoURL ? <AvatarImage src={user.photoURL} alt="User Avatar" /> : <AvatarFallback><UserCircle size={20}/></AvatarFallback>}
                                 </Avatar>
@@ -190,7 +184,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                                     <p className="font-semibold text-sm font-body">{user?.displayName || user?.email?.split('@')[0] || "User"}</p>
                                 </div>
                             </Button>
-                             <Button onClick={handleLogout} variant="outline" className="w-full mt-2">
+                             <Button onClick={handleLogout} variant="outline" className="w-full mt-2 text-sidebar-foreground border-sidebar-border hover:bg-sidebar-accent/20 hover:border-sidebar-accent">
                                 <LogOut className="mr-2 h-4 w-4" />
                                 Log out
                             </Button>
@@ -212,8 +206,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <SidebarTrigger />
             </div>
         </header>
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-background">
-            <div className="max-w-screen-xl mx-auto">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+            <div className="max-w-screen-2xl mx-auto"> {/* Increased max-width for wider content area */}
              {children}
             </div>
         </main>

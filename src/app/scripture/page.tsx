@@ -2,24 +2,35 @@
 "use client";
 
 import React, { useState, useTransition, useEffect } from 'react';
-import Link from 'next/link'; // Added missing import
+import Link from 'next/link';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { BookOpenText, Search } from 'lucide-react';
+import { BookOpenText, ChevronsRight, Download, Loader2, AlertCircle } from 'lucide-react';
 import { fetchVerse, getApiKey } from '@/lib/actions';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { ScrollArea } from '@/components/ui/scroll-area';
+
+
+interface FetchedVerse {
+    id: number;
+    reference: string;
+    text: string;
+}
 
 export default function ScripturePage() {
-  const [reference, setReference] = useState("John 3:16");
-  const [verseText, setVerseText] = useState<string | null>(null);
-  const [displayedReference, setDisplayedReference] = useState<string | null>(null);
+  const [verseInput, setVerseInput] = useState('');
+  const [parsedVerses, setParsedVerses] = useState<FetchedVerse[]>([]);
   const [isFetching, startFetchingTransition] = useTransition();
+  const [fetchError, setFetchError] = useState('');
+  
   const { user } = useAuth();
   const { toast } = useToast();
   const [currentApiKey, setCurrentApiKey] = useState<string | null>(null);
+  const [apiKeyChecked, setApiKeyChecked] = useState(false);
 
   useEffect(() => {
     const loadApiKey = async () => {
@@ -27,111 +38,161 @@ export default function ScripturePage() {
         const key = await getApiKey(user.uid);
         setCurrentApiKey(key);
         if (!key) {
-            toast({
-                title: "API Key Needed",
-                description: "ESV API Key is not set. Please configure it in Settings for full functionality.",
-                variant: "default" 
-            });
+          toast({
+            title: "ESV API Key Needed",
+            description: (
+              <p>
+                Please configure your ESV API Key in the{' '}
+                <Link href="/settings" className="underline text-primary hover:text-primary/80">
+                  Settings page
+                </Link>{' '}
+                to fetch scripture.
+              </p>
+            ),
+            variant: "default", 
+            duration: 10000,
+          });
         }
       }
+      setApiKeyChecked(true);
     };
     loadApiKey();
   }, [user, toast]);
 
-
-  const handleFetchVerse = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setVerseText(null);
-    
-    if (!user) {
-      toast({ title: "Authentication Required", description: "Please log in to fetch verses.", variant: "destructive" });
-      return;
-    }
+  const handleParseAndFetch = async () => {
+    if (!verseInput) return;
     if (!currentApiKey) {
-      toast({ title: "API Key Missing", description: "ESV API Key not found. Please set it in Settings.", variant: "destructive" });
+      setFetchError("ESV API Key is not configured. Please set it in Settings.");
+      toast({ title: "API Key Missing", description: "Please set your ESV API Key in Settings.", variant: "destructive" });
       return;
     }
     
     startFetchingTransition(async () => {
-      const result = await fetchVerse(reference, currentApiKey);
+      setFetchError('');
+      setParsedVerses([]);
+      
+      const query = verseInput.split(';').map(v => v.trim()).filter(Boolean).join(',');
+      const result = await fetchVerse(query, currentApiKey);
 
       if (result.success && result.data) {
-        setVerseText(result.data);
-        setDisplayedReference(reference);
+        // ESV API returns passage as a single string, query contains original reference.
+        // We'll make a single entry for the combined passage.
+        setParsedVerses([{ id: 0, reference: result.query || query, text: result.data.trim() }]);
       } else {
-        setVerseText(null);
-        setDisplayedReference(null);
-        toast({
-            title: "Error Fetching Verse",
-            description: result.error || "Could not fetch verse. Check the reference or API key in Settings.",
-            variant: "destructive"
-        });
+        setFetchError(result.error || 'Verse not found or invalid query. Try a full reference (e.g., John 3:16).');
+        toast({ title: "Error Fetching Verse", description: result.error, variant: "destructive" });
       }
     });
   };
 
+  const handleGenerateRtf = () => {
+    if (parsedVerses.length === 0) return;
+
+    let rtf = `{\\rtf1\\ansi\\deff0 {\\fonttbl{\\f0 Arial;}} \\fs24`;
+    parsedVerses.forEach(verse => {
+        rtf += `{\\pard\\b ${verse.reference}\\b0\\par}`;
+        // Clean up verse text: remove extra newlines, handle specific ESV artifacts if any.
+        const cleanedText = verse.text.replace(/\n\s*\n/g, '\\par ').replace(/\n/g, ' ');
+        rtf += `{\\pard ${cleanedText}\\par}`;
+        rtf += `{\\pard\\par}`; 
+    });
+    rtf += `}`;
+    
+    const blob = new Blob([rtf], { type: 'application/rtf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeDate = new Date().toISOString().split('T')[0];
+    a.href = url;
+    a.download = `sermon-notes-${safeDate}.rtf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast({ title: "RTF Exported", description: "Sermon notes RTF file has been downloaded." });
+  };
+
   return (
-    <div className="space-y-6">
-      <Card className="bg-card/70 backdrop-blur-md border-border shadow-xl">
+    <div className="space-y-6 animate-fade-in">
+      <Card className="card-glass">
         <CardHeader>
-          <CardTitle className="font-headline text-3xl flex items-center gap-2">
-            <BookOpenText size={32} className="text-primary" />
-            Scripture Lookup
+          <CardTitle className="font-headline text-3xl flex items-center gap-3">
+            <BookOpenText size={32} className="text-accent" />
+            Sermon Builder
           </CardTitle>
           <CardDescription>
-            Enter a Bible reference to display the verse. Requires ESV API Key to be set in Settings.
+            Enter Bible verse references to fetch and format them for your sermon notes or presentations.
           </CardDescription>
         </CardHeader>
       </Card>
 
-      <Card className="bg-card/70 backdrop-blur-md border-border shadow-lg">
-        <CardHeader>
-          <CardTitle className="font-headline">Enter Reference</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleFetchVerse} className="space-y-4">
-            <div>
-              <Label htmlFor="scripture-reference" className="block text-sm font-medium mb-1">Scripture Reference</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="scripture-reference"
-                  type="text"
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                  placeholder="e.g., John 3:16"
-                  className="flex-grow bg-background"
-                  aria-label="Scripture Reference"
-                />
-                <Button type="submit" disabled={isFetching || !user || !currentApiKey} className="bg-primary hover:bg-primary/90 text-primary-foreground whitespace-nowrap">
-                  <Search className="mr-2 h-4 w-4" />
-                  {isFetching ? "Fetching..." : "Fetch Verse"}
-                </Button>
-              </div>
-               {!currentApiKey && user && (
-                <p className="text-sm text-amber-600 dark:text-amber-400 mt-2">
-                  ESV API Key is not configured. Please set it in <Link href="/settings" className="underline hover:text-primary">Settings</Link>.
+      <div className="grid md:grid-cols-2 gap-6">
+        <Card className="card-glass">
+          <CardHeader>
+            <CardTitle className="font-headline">1. Input Verses</CardTitle>
+            <CardDescription>Enter references separated by semicolons (e.g., John 3:16; Romans 8:1; Ps 23:1-6).</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Textarea 
+                value={verseInput} 
+                onChange={(e) => setVerseInput(e.target.value)}
+                className="h-28 bg-background/70 dark:bg-input/70 placeholder:text-muted-foreground"
+                placeholder="e.g., John 3:16-17; Romans 8:28; Psalm 23" 
+            />
+            <Button 
+                onClick={handleParseAndFetch} 
+                className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground" 
+                disabled={isFetching || !verseInput || !apiKeyChecked || !currentApiKey}
+            >
+              <ChevronsRight className="mr-2 h-4 w-4" />
+              {isFetching ? 'Fetching...' : 'Parse & Fetch Verses'}
+            </Button>
+             {!currentApiKey && apiKeyChecked && user && (
+                <p className="text-sm text-destructive mt-2 flex items-center gap-1">
+                  <AlertCircle size={16} /> ESV API Key is not configured. Please set it in <Link href="/settings" className="underline hover:text-primary">Settings</Link>.
                 </p>
               )}
-            </div>
-          </form>
+          </CardContent>
+        </Card>
 
-          { verseText && !isFetching && (
-            <div className="mt-6 pt-4 border-t border-border">
-              {displayedReference && <h3 className="font-headline text-xl mb-2 text-primary-foreground">{displayedReference}</h3>}
-              <blockquote className="p-4 border-l-4 border-accent bg-accent/10 text-accent-foreground/90 rounded-r-md shadow">
-                <p className="italic leading-relaxed text-base">{verseText}</p>
-              </blockquote>
+        <Card className="card-glass">
+          <CardHeader>
+            <CardTitle className="font-headline">2. Formatted Output</CardTitle>
+            <CardDescription>Verses will appear here, ready for export.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-72 w-full p-1 rounded-md border border-input bg-background/50 dark:bg-input/50">
+                <div className="p-3 space-y-4">
+                    {!verseInput && !isFetching && !fetchError && parsedVerses.length === 0 && (
+                         <div className="text-muted-foreground text-center py-10">Your formatted verses will appear here.</div>
+                    )}
+                    {isFetching && (
+                        <div className="text-muted-foreground text-center py-10 flex items-center justify-center gap-2">
+                            <Loader2 className="animate-spin" /> Loading...
+                        </div>
+                    )}
+                    {fetchError && !isFetching && (
+                        <div className="text-destructive bg-destructive/10 p-4 rounded-md flex items-start gap-2">
+                            <AlertCircle className="mt-1 flex-shrink-0"/>
+                            <p>{fetchError}</p>
+                        </div>
+                    )}
+                    {!isFetching && !fetchError && parsedVerses.length > 0 && parsedVerses.map(verse => (
+                        <div key={verse.id} className="bg-primary/10 dark:bg-primary/20 p-4 rounded-lg shadow">
+                            <p className="font-semibold text-primary dark:text-primary-foreground/90">{verse.reference}</p>
+                            <p className="text-foreground/90 dark:text-foreground/80 mt-1 whitespace-pre-wrap">{verse.text}</p>
+                        </div>
+                    ))}
+                </div>
+            </ScrollArea>
+            <div className="border-t border-border pt-4 mt-4 flex justify-end">
+                 <Button onClick={handleGenerateRtf} icon={Download} disabled={parsedVerses.length === 0 || isFetching} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                    <Download className="mr-2 h-4 w-4" />
+                    Generate RTF
+                 </Button>
             </div>
-          )}
-           {isFetching && (
-             <div className="mt-6 pt-4 text-center text-muted-foreground">
-                <p>Loading verse...</p>
-             </div>
-           )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
-
-    
