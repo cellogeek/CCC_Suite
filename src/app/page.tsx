@@ -175,10 +175,10 @@ export default function ChordProPage() {
 
   const processedSongHtml = useMemo(() => {
     if (!processedSong) return '';
-    addLog("--- RE-GENERATING HTML (Arial 18pt, Padded) ---");
+    addLog("--- RE-GENERATING HTML (Final Formatting) ---");
     const songToFormat = processedSong;
     
-    let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${rtfEscape(songToFormat.title)}</title>
+    let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${songToFormat.title}</title>
         <style>
             body { font-family: Arial, sans-serif; font-size: 18pt; line-height: 1.2; }
             .cpro { width: 100%; }
@@ -197,7 +197,7 @@ export default function ChordProPage() {
     if (showArtist && songToFormat.artist) {
         metaHtml += `Artist: ${rtfEscape(songToFormat.artist)}<br/>`;
     }
-    metaHtml += `Key: <span class="chord-line">${rtfEscape(songToFormat.key)}</span></div>`;
+    metaHtml += `<span class="chord-line">Key: ${rtfEscape(songToFormat.key)}</span></div>`;
     html += metaHtml;
 
     let lastLineWasSection = false;
@@ -219,17 +219,24 @@ export default function ChordProPage() {
                 html += `<br>`;
                 return;
             }
+            
             let chordLine = '';
             let lyricLine = '';
-            line.items.forEach(item => {
+            line.items.forEach((item, itemIndex) => {
                 const chord = simplifyChordDisplay(item.chord);
                 const lyrics = item.lyrics || '';
+                
+                let effectiveLength = lyrics.length;
+                if (itemIndex > 0) {
+                    effectiveLength = Math.round(effectiveLength * 1.3);
+                }
+
                 if (chord) {
                     chordLine += chord;
-                    const padding = Math.max(0, lyrics.length - chord.length);
+                    const padding = Math.max(0, effectiveLength - chord.length);
                     chordLine += ' '.repeat(padding);
                 } else {
-                    chordLine += ' '.repeat(lyrics.length);
+                    chordLine += ' '.repeat(effectiveLength);
                 }
                 lyricLine += lyrics;
             });
@@ -264,77 +271,69 @@ export default function ChordProPage() {
 
   const generateRtfContent = () => {
     if (!processedSong) return null;
-    addLog("--- GENERATING RTF (Arial 18pt, Padded, Refined) ---");
+    addLog("--- GENERATING RTF (Final Formatting) ---");
     
-    const rtfEscape = (str: string | undefined): string => String(str || '').replace(/\\/g, '\\\\').replace(/{/g, '\\{').replace(/}/g, '\\}');
-    
-    let rtf = `{\\rtf1\\ansi\\deff0`;
-    rtf += `{\\fonttbl{\\f0 Arial;}}`;
-    rtf += `{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red128\\green128\\blue128;}`; // 0:black, 1:red, 2:gray
-    // Base paragraph: Arial 18pt (fs36), multi-line spacing
-    rtf += `\\pard\\slmult1\\f0\\fs36`; 
+    let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red128\\green128\\blue128;}\\pard\\slmult1\\f0\\fs36`;
 
-    // Title
     rtf += `{\\pard\\qc\\b\\f0\\fs48 ${rtfEscape(processedSong.title)}\\par}`;
     
-    // Meta (Artist and Key)
-    rtf += `{\\pard\\qc\\f0\\fs28\\cf2 `; // Centered, 14pt (fs28), gray (cf2)
+    let metaRtf = `{\\pard\\qc\\f0\\fs28\\cf2 `;
     if (showArtist && processedSong.artist) {
-        rtf += `Artist: ${rtfEscape(processedSong.artist)}   `;
+        metaRtf += `Artist: ${rtfEscape(processedSong.artist)}   `;
     }
-    rtf += `Key: {\\b\\f0\\fs36\\cf1 ${rtfEscape(processedSong.key)}}`; // Key: Bold, 18pt (fs36), red (cf1)
-    rtf += `\\par}`; // End meta paragraph
-    rtf += `\\par\\par`; // Two blank lines for spacing
+    metaRtf += `{\\b\\f0\\fs36\\cf1 Key: ${rtfEscape(processedSong.key)}}}`; // Key: Bold, 18pt (fs36), red (cf1)
+    rtf += metaRtf + `\\par}`; 
+    rtf += `\\par\\par`; 
 
     let lastLineWasSection = false;
 
     processedSong.body.forEach((line, index) => {
         if (line.type === 'section') {
-            if (index > 0) rtf += `\\par\\par`; // Two lines of spacing before new section
-            // Section: Bold, 18pt (fs36), black (default color after pard)
+            if (index > 0) rtf += `\\par\\par`;
             rtf += `{\\pard\\slmult1\\f0\\fs36\\b ${rtfEscape(line.content || '')}}\\par`;
             lastLineWasSection = true;
         } else if (line.type === 'comment') {
-            // Comment: Italic, 18pt (fs36), black (default color after pard)
             rtf += `{\\pard\\slmult1\\f0\\fs36\\i ${rtfEscape(line.content || '')}}\\par`;
             lastLineWasSection = false;
         } else if (line.type === 'lyrics' && line.items) {
             if (lastLineWasSection) {
-                rtf += `\\pard\\slmult1\\f0\\fs36\\par`; // One line of space after section
+                rtf += `\\pard\\slmult1\\f0\\fs36\\par`;
                 lastLineWasSection = false;
             }
             if (line.items.length === 0) {
-                 rtf += `\\pard\\slmult1\\f0\\fs36\\par`; // Blank line
+                 rtf += `\\pard\\slmult1\\f0\\fs36\\par`; 
                  return;
             }
             
             let chordLine = '';
             let lyricLine = '';
-            line.items.forEach(item => {
+            line.items.forEach((item, itemIndex) => {
                 const chord = simplifyChordDisplay(item.chord) || '';
                 const lyrics = item.lyrics || '';
+                
+                let effectiveLength = lyrics.length;
+                if (itemIndex > 0) {
+                    effectiveLength = Math.round(effectiveLength * 1.3);
+                }
+
                 if (chord) {
                     chordLine += chord;
-                    const padding = Math.max(0, lyrics.length - chord.length);
+                    const padding = Math.max(0, effectiveLength - chord.length);
                     chordLine += ' '.repeat(padding);
                 } else {
-                    chordLine += ' '.repeat(lyrics.length);
+                    chordLine += ' '.repeat(effectiveLength);
                 }
                 lyricLine += lyrics;
             });
             
             if (chordLine.trim().length > 0) {
-                // Chord line: Bold, 18pt (fs36), red (cf1)
                 rtf += `\\pard\\slmult1\\f0\\fs36{\\b\\cf1 ${rtfEscape(chordLine)}}\\par`;
             }
-            // Lyric line: 18pt (fs36), black (cf0)
             rtf += `\\pard\\slmult1\\f0\\fs36{\\cf0 ${rtfEscape(lyricLine)}}\\par`;
         }
-        // No universal \\par\\n here; each element manages its paragraph.
     });
     
-    // Footer
-    rtf += `\\par\\par{\\pard\\qc\\f0\\fs20\\cf2 `; // Centered, 10pt (fs20), gray (cf2)
+    rtf += `\\par\\par{\\pard\\qc\\f0\\fs20\\cf2 `;
     const footerMeta = processedSong.meta || {};
     if (showFooter) {
         let footerRtfContent = '';
@@ -343,17 +342,16 @@ export default function ChordProPage() {
         if (footerMeta.footer) footerRtfContent += `${rtfEscape(footerMeta.footer)}\\line `;
         if (processedSong.footer_comments && processedSong.footer_comments.length > 0) {
             if(footerRtfContent.trim() && !footerRtfContent.endsWith('\\line ')) footerRtfContent += '\\line ';
-            else if (footerRtfContent.trim()) {} // if it ends with \line, nothing to add
-            else {} // if it's empty, nothing to add
+            else if (footerRtfContent.trim()) {} 
+            else {} 
             footerRtfContent += processedSong.footer_comments.map(fc => rtfEscape(fc)).join('\\line ');
         }
-        // Remove trailing \line if it exists to prevent extra blank line at the very end
         if (footerRtfContent.endsWith('\\line ')) {
             footerRtfContent = footerRtfContent.substring(0, footerRtfContent.length - '\\line '.length);
         }
         rtf += footerRtfContent;
     }
-    rtf += `\\par}}`; // End footer paragraph and main RTF group
+    rtf += `\\par}}`;
     return rtf;
   };
   
