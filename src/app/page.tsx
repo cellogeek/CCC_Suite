@@ -5,6 +5,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BookOpen, Music, FileText, Download, ChevronsRight, Settings, UploadCloud, KeyRound, Eye, FileUp, Loader2, AlertCircle, PlayCircle, TestTube2, Workflow, TerminalSquare, Globe, FolderOpen, Save } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast"; // Keep for potential future use if ActionButton wants to show toasts
 
+
 // --- Helper & Utility Functions ---
 const GlassCard = ({ children, className = '' }: { children: React.ReactNode, className?: string }) => (
   <div className={`bg-white/10 backdrop-blur-lg rounded-2xl shadow-lg border border-white/20 p-6 sm:p-8 ${className}`}>
@@ -490,8 +491,7 @@ const ChordProImporter = () => {
         if (showArtist && processedSong.artist) {
             metaRtf += `Artist: ${rtfEscape(processedSong.artist)}   `;
         }
-        metaRtf += `{\\b\\fs36\\cf1 Key: ${rtfEscape(processedSong.key)}}`;
-        metaRtf += `}`; 
+        metaRtf += `{\\b\\fs36\\cf1 Key: ${rtfEscape(processedSong.key)}}}`; 
         rtf += metaRtf + `\\par`;
         
         let lastLineWasSection = false;
@@ -499,10 +499,10 @@ const ChordProImporter = () => {
         processedSong.body.forEach((line, index) => {
             if (line.type === 'section') {
                 if (index > 0) rtf += `\\par\\par`;
-                rtf += `{\\pard\\slmult1\\f0\\fs36\\b ${rtfEscape(line.content || '')}\\par}`;
+                rtf += `{\\b ${rtfEscape(line.content || '')}}`;
                 lastLineWasSection = true;
             } else if (line.type === 'comment') {
-                rtf += `{\\pard\\slmult1\\f0\\fs36\\i ${rtfEscape(line.content || '')}\\par}`;
+                rtf += `{\\i ${rtfEscape(line.content || '')}}`;
                 lastLineWasSection = false;
             } else if (line.type === 'lyrics' && line.items) {
                 if (lastLineWasSection) {
@@ -527,7 +527,7 @@ const ChordProImporter = () => {
                         const padding = Math.max(0, effectiveLength - chord.length);
                         chordLine += ' '.repeat(padding);
                     } else {
-                        chordLine += ' '.repeat(lyrics.length);
+                        chordLine += ' '.repeat(effectiveLength);
                     }
                     lyricLine += lyrics;
                 });
@@ -536,8 +536,9 @@ const ChordProImporter = () => {
                 if (chordLine.trim().length > 0) {
                     rtf += `{\\b\\cf1 ${rtfEscape(chordLine)}}\\par`;
                 }
-                rtf += `{\\cf0 ${rtfEscape(lyricLine)}}\\par`;
+                rtf += `{\\cf0 ${rtfEscape(lyricLine)}}`;
             }
+            rtf += `\\par`;
         });
         
         const footerMeta = processedSong.meta || {};
@@ -560,7 +561,7 @@ const ChordProImporter = () => {
             }
         }
 
-        rtf += `}}`;
+        rtf += `}`;
         return rtf;
     };
     
@@ -578,17 +579,16 @@ const ChordProImporter = () => {
             metaRtf += `Artist: ${rtfEscape(processedSong.artist)}   `;
         }
         metaRtf += `{\\b\\f1\\fs36\\cf1 Key: ${rtfEscape(processedSong.key)}}}`;
-        metaRtf += `}`;
         rtf += metaRtf + `\\par`;
         
         let lastLineWasSection = false;
         processedSong.body.forEach((line, index) => {
             if (line.type === 'section') {
                 if (index > 0) rtf += `\\par\\par`;
-                rtf += `{\\pard\\slmult1\\f1\\fs36\\b ${rtfEscape(line.content || '')}\\par}`;
+                rtf += `{\\b\\f1 ${rtfEscape(line.content || '')}}`;
                 lastLineWasSection = true;
             } else if (line.type === 'comment') {
-                rtf += `{\\pard\\slmult1\\f1\\fs36\\i ${rtfEscape(line.content || '')}\\par}`;
+                rtf += `{\\i\\f1 ${rtfEscape(line.content || '')}}`;
                 lastLineWasSection = false;
             } else if (line.type === 'lyrics' && line.items) {
                 if (lastLineWasSection) { rtf += `\\par`; lastLineWasSection = false; }
@@ -617,8 +617,9 @@ const ChordProImporter = () => {
                 if (chordLine.trim().length > 0) {
                     rtf += `{\\b\\cf1 ${rtfEscape(chordLine)}}\\par`;
                 }
-                rtf += `{\\cf0 ${rtfEscape(lyricLine)}}\\par`;
+                rtf += `{\\cf0 ${rtfEscape(lyricLine)}}`;
             }
+            rtf += `\\par`;
         });
         
         const footerMeta = processedSong.meta || {};
@@ -641,7 +642,7 @@ const ChordProImporter = () => {
             }
         }
 
-        rtf += `}}`;
+        rtf += `}`;
         return rtf;
     };
 
