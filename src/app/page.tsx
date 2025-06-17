@@ -390,7 +390,7 @@ const ChordProImporter = () => {
 
     const processedSongHtml = useMemo(() => {
         if (!processedSong) return '';
-        addLog("--- RE-GENERATING HTML (DejaVu Sans Mono Bold, Black Text, Improved Fallbacks) ---");
+        addLog("--- RE-GENERATING HTML (DejaVu Sans Mono Bold, Black Text, Improved Fallbacks, Corrected Spacing) ---");
         const songToFormat = processedSong;
         
         let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${rtfEscape(songToFormat.title)}</title>
@@ -416,20 +416,13 @@ const ChordProImporter = () => {
         metaHtml += `Key: <span style="font-family: 'DejaVu Sans Mono', Menlo, Monaco, Consolas, monospace; color: #ff0000; font-weight: bold; font-size: 14pt;">${rtfEscape(songToFormat.key)}</span></div>`; 
         html += metaHtml;
 
-        let lastLineWasSection = false;
-
         songToFormat.body.forEach((line, index) => {
             if (line.type === 'section') {
                 if (index > 0) html += `<br><br>`; // Two blank lines before section
                 html += `<div class="section">${rtfEscape(line.content)}</div>`;
-                lastLineWasSection = true;
             } else if (line.type === 'comment') {
                 html += `<div class="comment">${rtfEscape(line.content)}</div>`;
-                lastLineWasSection = false;
             } else if (line.type === 'lyrics' && line.items) {
-                // Removed the 18pt spacer div that was here after a section title
-                lastLineWasSection = false; // Reset flag as we are now in lyrics/content
-                
                 if (line.items.length === 0) { /* Do not render <br> for empty lines within sections */ return; } 
                 
                 let chordLine = '';
@@ -491,27 +484,18 @@ const ChordProImporter = () => {
         if (showArtist && songToFormat.artist) {
             metaRtf += `Artist: ${rtfEscape(songToFormat.artist)}   `;
         }
-        metaRtf += `{\\b\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}`;
-        metaRtf += `}`; 
+        metaRtf += `{\\b\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}}`; 
         rtf += metaRtf + `\\par`;
         
-        let lastLineWasSection = false;
-
-        processedSong.body.forEach((line, index) => {
+        songToFormat.body.forEach((line, index) => {
             if (line.type === 'section') {
                 if (index > 0) rtf += `\\par\\par`;
-                rtf += `{\\b ${rtfEscape(line.content)}}`;
-                lastLineWasSection = true;
+                rtf += `{\\pard\\b ${rtfEscape(line.content)}\\par}`;
             } else if (line.type === 'comment') {
-                rtf += `{\\i ${rtfEscape(line.content)}}`;
-                lastLineWasSection = false;
+                rtf += `{\\pard\\i ${rtfEscape(line.content)}\\par}`;
             } else if (line.type === 'lyrics' && line.items) {
-                if (lastLineWasSection) {
-                    rtf += `\\par`;
-                    lastLineWasSection = false;
-                }
                 if (line.items.length === 0) {
-                     rtf += `\\par`; return;
+                     rtf += `{\\pard\\par}`; return;
                 }
                 
                 let chordLine = '';
@@ -533,13 +517,11 @@ const ChordProImporter = () => {
                     lyricLine += lyrics;
                 });
                 
-                rtf += `\\pard\\slmult1\\f0\\fs36`;
                 if (chordLine.trim().length > 0) {
-                    rtf += `{\\b\\cf1 ${rtfEscape(chordLine)}}\\par`;
+                    rtf += `{\\pard\\slmult1\\f0\\fs36\\b\\cf1 ${rtfEscape(chordLine)}\\par}`;
                 }
-                rtf += `{\\cf0 ${rtfEscape(lyricLine)}}`;
+                rtf += `{\\pard\\slmult1\\f0\\fs36\\cf0 ${rtfEscape(lyricLine)}\\par}`;
             }
-            rtf += `\\par`;
         });
         
         const footerMeta = songToFormat.meta || {};
@@ -579,22 +561,17 @@ const ChordProImporter = () => {
         if (showArtist && songToFormat.artist) {
             metaRtf += `Artist: ${rtfEscape(songToFormat.artist)}   `;
         }
-        metaRtf += `{\\b\\f1\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}`;
-        metaRtf += `}`; 
+        metaRtf += `{\\b\\f1\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}}`; 
         rtf += metaRtf + `\\par`;
         
-        let lastLineWasSection = false;
-        processedSong.body.forEach((line, index) => {
+        songToFormat.body.forEach((line, index) => {
             if (line.type === 'section') {
                 if (index > 0) rtf += `\\par\\par`;
-                rtf += `{\\b\\f1 ${rtfEscape(line.content)}}`;
-                lastLineWasSection = true;
+                rtf += `{\\pard\\b\\f1 ${rtfEscape(line.content)}\\par}`;
             } else if (line.type === 'comment') {
-                rtf += `{\\i\\f1 ${rtfEscape(line.content)}}`;
-                lastLineWasSection = false;
+                rtf += `{\\pard\\i\\f1 ${rtfEscape(line.content)}\\par}`;
             } else if (line.type === 'lyrics' && line.items) {
-                if (lastLineWasSection) { rtf += `\\par`; lastLineWasSection = false; }
-                if (line.items.length === 0) { rtf += `\\par`; return; }
+                if (line.items.length === 0) { rtf += `{\\pard\\par}`; return; }
                 
                 let chordLine = '';
                 let lyricLine = '';
@@ -615,13 +592,11 @@ const ChordProImporter = () => {
                     lyricLine += lyrics;
                 });
                 
-                rtf += `{\\pard\\slmult1\\f0\\fs36`;
                 if (chordLine.trim().length > 0) {
-                    rtf += `{\\b\\cf1 ${rtfEscape(chordLine)}}\\par`;
+                    rtf += `{\\pard\\slmult1\\f0\\fs36\\b\\cf1 ${rtfEscape(chordLine)}\\par}`;
                 }
-                rtf += `{\\cf0 ${rtfEscape(lyricLine)}}`;
+                rtf += `{\\pard\\slmult1\\f0\\fs36\\cf0 ${rtfEscape(lyricLine)}\\par}`;
             }
-            rtf += `\\par`;
         });
         
         const footerMeta = songToFormat.meta || {};
