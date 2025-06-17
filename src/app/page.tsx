@@ -50,10 +50,11 @@ const SongPreview = ({ htmlContent }: { htmlContent: string }) => {
       srcDoc={htmlContent}
       title="Song Preview"
       className="w-full h-full bg-white rounded-lg border-none"
-      sandbox="allow-scripts"
+      sandbox="allow-scripts" // sandbox to prevent script execution from user input
     />
   );
 };
+
 
 export default function ChordProPage() {
   const [chordProInput, setChordProInput] = useState('');
@@ -76,6 +77,7 @@ export default function ChordProPage() {
   const [isLoadingSongs, startLoadingSongsTransition] = useTransition();
   const [availableSongs, setAvailableSongs] = useState<SongToLoad[]>([]);
   const [isLoadSongDialogOpen, setIsLoadSongDialogOpen] = useState(false);
+
 
   const addLog = (message: string, data?: any) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -234,9 +236,9 @@ export default function ChordProPage() {
             
             html += `<div class="line-pair">`;
             if(chordLine.trim().length > 0) {
-                html += `<div class="chord-line">${rtfEscape(chordLine)}</div>`;
+                html += `<div class="chord-line">${chordLine}</div>`;
             }
-            html += `<div class="lyric-line">${rtfEscape(lyricLine)}</div>`;
+            html += `<div class="lyric-line">${lyricLine}</div>`;
             html += `</div>`;
         } else if (line.type === 'chorus_start' || line.type === 'chorus_end') {
              // No specific rendering for chorus blocks in this simplified HTML version
@@ -262,36 +264,47 @@ export default function ChordProPage() {
 
   const generateRtfContent = () => {
     if (!processedSong) return null;
-    addLog("--- GENERATING RTF (Arial 18pt, Padded) ---");
+    addLog("--- GENERATING RTF (Arial 18pt, Padded, Refined) ---");
     
-    let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red128\\green128\\blue128;}\\pard\\slmult1\\f0\\fs36`;
+    const rtfEscape = (str: string | undefined): string => String(str || '').replace(/\\/g, '\\\\').replace(/{/g, '\\{').replace(/}/g, '\\}');
+    
+    let rtf = `{\\rtf1\\ansi\\deff0`;
+    rtf += `{\\fonttbl{\\f0 Arial;}}`;
+    rtf += `{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red128\\green128\\blue128;}`; // 0:black, 1:red, 2:gray
+    // Base paragraph: Arial 18pt (fs36), multi-line spacing
+    rtf += `\\pard\\slmult1\\f0\\fs36`; 
 
-    rtf += `{\\pard\\qc\\b\\fs48 ${rtfEscape(processedSong.title)}\\par}`;
+    // Title
+    rtf += `{\\pard\\qc\\b\\f0\\fs48 ${rtfEscape(processedSong.title)}\\par}`;
     
-    let metaRtf = `{\\pard\\qc\\fs28\\cf2 `; 
+    // Meta (Artist and Key)
+    rtf += `{\\pard\\qc\\f0\\fs28\\cf2 `; // Centered, 14pt (fs28), gray (cf2)
     if (showArtist && processedSong.artist) {
-        metaRtf += `Artist: ${rtfEscape(processedSong.artist)}   `;
+        rtf += `Artist: ${rtfEscape(processedSong.artist)}   `;
     }
-    metaRtf += `Key: {\\b\\fs36\\cf1 ${rtfEscape(processedSong.key)}}}`; 
-    rtf += metaRtf + `\\par\\par`;
-    
+    rtf += `Key: {\\b\\f0\\fs36\\cf1 ${rtfEscape(processedSong.key)}}`; // Key: Bold, 18pt (fs36), red (cf1)
+    rtf += `\\par}`; // End meta paragraph
+    rtf += `\\par\\par`; // Two blank lines for spacing
+
     let lastLineWasSection = false;
 
     processedSong.body.forEach((line, index) => {
         if (line.type === 'section') {
-            if (index > 0) rtf += `\\par\\par`;
-            rtf += `{\\b ${rtfEscape(line.content || '')}}`;
+            if (index > 0) rtf += `\\par\\par`; // Two lines of spacing before new section
+            // Section: Bold, 18pt (fs36), black (default color after pard)
+            rtf += `{\\pard\\slmult1\\f0\\fs36\\b ${rtfEscape(line.content || '')}}\\par`;
             lastLineWasSection = true;
         } else if (line.type === 'comment') {
-            rtf += `{\\i ${rtfEscape(line.content || '')}}`;
+            // Comment: Italic, 18pt (fs36), black (default color after pard)
+            rtf += `{\\pard\\slmult1\\f0\\fs36\\i ${rtfEscape(line.content || '')}}\\par`;
             lastLineWasSection = false;
         } else if (line.type === 'lyrics' && line.items) {
             if (lastLineWasSection) {
-                rtf += `\\par`; 
+                rtf += `\\pard\\slmult1\\f0\\fs36\\par`; // One line of space after section
                 lastLineWasSection = false;
             }
             if (line.items.length === 0) {
-                 rtf += `\\par`; 
+                 rtf += `\\pard\\slmult1\\f0\\fs36\\par`; // Blank line
                  return;
             }
             
@@ -310,18 +323,18 @@ export default function ChordProPage() {
                 lyricLine += lyrics;
             });
             
-            rtf += `\\pard\\slmult1\\f0\\fs36`;
             if (chordLine.trim().length > 0) {
-                rtf += `{\\b\\cf1 ${rtfEscape(chordLine)}}\\par`;
+                // Chord line: Bold, 18pt (fs36), red (cf1)
+                rtf += `\\pard\\slmult1\\f0\\fs36{\\b\\cf1 ${rtfEscape(chordLine)}}\\par`;
             }
-            rtf += `{\\cf0 ${rtfEscape(lyricLine)}}`;
-        } else if (line.type === 'chorus_start' || line.type === 'chorus_end') {
-             // No specific RTF rendering for chorus blocks
+            // Lyric line: 18pt (fs36), black (cf0)
+            rtf += `\\pard\\slmult1\\f0\\fs36{\\cf0 ${rtfEscape(lyricLine)}}\\par`;
         }
-        rtf += `\\par\n`;
+        // No universal \\par\\n here; each element manages its paragraph.
     });
     
-    rtf += `\\par\\par{\\pard\\qc\\cf2\\fs20 `; 
+    // Footer
+    rtf += `\\par\\par{\\pard\\qc\\f0\\fs20\\cf2 `; // Centered, 10pt (fs20), gray (cf2)
     const footerMeta = processedSong.meta || {};
     if (showFooter) {
         let footerRtfContent = '';
@@ -330,16 +343,17 @@ export default function ChordProPage() {
         if (footerMeta.footer) footerRtfContent += `${rtfEscape(footerMeta.footer)}\\line `;
         if (processedSong.footer_comments && processedSong.footer_comments.length > 0) {
             if(footerRtfContent.trim() && !footerRtfContent.endsWith('\\line ')) footerRtfContent += '\\line ';
-            else if (footerRtfContent.trim()) {}
-            else {}
+            else if (footerRtfContent.trim()) {} // if it ends with \line, nothing to add
+            else {} // if it's empty, nothing to add
             footerRtfContent += processedSong.footer_comments.map(fc => rtfEscape(fc)).join('\\line ');
         }
+        // Remove trailing \line if it exists to prevent extra blank line at the very end
         if (footerRtfContent.endsWith('\\line ')) {
             footerRtfContent = footerRtfContent.substring(0, footerRtfContent.length - '\\line '.length);
         }
         rtf += footerRtfContent;
     }
-    rtf += `\\par}}`;
+    rtf += `\\par}}`; // End footer paragraph and main RTF group
     return rtf;
   };
   
@@ -592,5 +606,4 @@ export default function ChordProPage() {
     </div>
   );
 }
-
     
