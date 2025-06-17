@@ -62,8 +62,8 @@ export default function ChordProPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [songTitleForSave, setSongTitleForSave] = useState("Untitled Song");
 
-  const [showArtist, setShowArtist] = useState(true);
-  const [showFooter, setShowFooter] = useState(true); // Consolidated from showCopyright, showCcli removed
+  const [showArtist, setShowArtist] = useState(true); // Corrected initialization
+  const [showFooter, setShowFooter] = useState(true);
 
   const [parsedSong, setParsedSong] = useState<ParsedSong | null>(null);
   const [log, setLog] = useState<string[]>([]);
@@ -90,6 +90,8 @@ export default function ChordProPage() {
     }
     setLog(prev => [logMessage, ...prev.slice(0, 99)]);
   };
+  
+  const rtfEscape = (str: string | undefined): string => String(str || '').replace(/\\/g, '\\\\').replace(/{/g, '\\{').replace(/}/g, '\\}');
 
   useEffect(() => {
     setLog([]);
@@ -171,140 +173,148 @@ export default function ChordProPage() {
 
   const processedSongHtml = useMemo(() => {
     if (!processedSong) return '';
-    addLog("--- RE-GENERATING HTML ---");
+    addLog("--- RE-GENERATING HTML (Arial 18pt) ---");
     const songToFormat = processedSong;
-    let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${songToFormat.title}</title><link href="https://cdn.jsdelivr.net/npm/dejavu-sans@1.0.0/css/dejavu-sans.min.css" rel="stylesheet"><link href="https://cdn.jsdelivr.net/npm/dejavu-sans-mono@1.0.0/css/dejavu-sans-mono.min.css" rel="stylesheet"><style>body{font-family:'DejaVu Sans',Verdana,sans-serif;margin:2em;font-weight:bold;}.cpro{width:100%;}h1{font-size:16pt;text-align:center;}.meta-info{font-size:16pt;text-align:center;margin-bottom:2em;}.line-pair{margin-bottom:.8em;}.chord-line,.lyric-line{font-family:'DejaVu Sans Mono','Courier New',monospace;font-size:14pt;white-space:pre;line-height:1.2;}.chord-line{color:#ff0000;}.section{font-weight:bold;margin-top:1.2em;margin-bottom:.25em;font-size:14pt;}.comment{font-style:italic;color:#666;margin-bottom:.5em;font-size:14pt;}.chorus-block{padding-left:20px;border-left:2px solid #ccc;margin-left:5px;margin-top:.5em;margin-bottom:.5em;}.footer{font-size:9pt;color:#888;margin-top:3em;text-align:center;}</style></head><body><div class="cpro"><h1>${songToFormat.title}</h1><div class="meta-info">`;
-    if (showArtist && songToFormat.artist) html += `Artist: ${songToFormat.artist}<br/>`;
-    html += `Key: ${songToFormat.key}<br/>`;
-    html += `</div>`;
-    songToFormat.body.forEach(line => {
-        if (line.type === 'section') { html += `<div class="section">${line.content}</div>`; }
-        else if (line.type === 'comment') { html += `<div class="comment">${line.content}</div>`; }
-        else if (line.type === 'chorus_start') { html += `<div class="chorus-block">`; }
-        else if (line.type === 'chorus_end') { html += `</div>`; }
-        else if (line.type === 'lyrics' && line.items) {
-            if (line.items.length === 0) { html += `<br>`; return; }
-            let chordLine = '';
-            let lyricLine = '';
+    
+    let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${rtfEscape(songToFormat.title)}</title>
+        <style>
+            body { font-family: Arial, sans-serif; font-size: 18pt; line-height: 1.2; }
+            .cpro { width: 100%; }
+            h1 { font-size: 24pt; text-align: center; font-weight: bold; color: black; margin-bottom: 0; }
+            .meta-info { font-size: 14pt; text-align: center; color: #888; margin-bottom: 36px; }
+            .section { font-weight: bold; color: black; margin-top: 36px; }
+            .comment { font-style: italic; color: #666; }
+            .lyrics-line { display: inline; }
+            .chord { color: #ff0000; font-weight: bold; }
+            .footer { font-size: 10pt; color: #888; margin-top: 36px; text-align: center; }
+        </style></head><body><div class="cpro"><h1>${rtfEscape(songToFormat.title)}</h1>`;
+    
+    if (showArtist && songToFormat.artist) {
+        html += `<div class="meta-info">Artist: ${rtfEscape(songToFormat.artist)}<br/>Key: ${rtfEscape(songToFormat.key)}</div>`;
+    } else {
+        html += `<div class="meta-info">Key: ${rtfEscape(songToFormat.key)}</div>`;
+    }
+
+    songToFormat.body.forEach((line, index) => {
+        if (line.type === 'section') {
+            if (index > 0) {
+                html += `<br><br>`;
+            }
+            html += `<div class="section">${rtfEscape(line.content || '')}</div>`;
+        } else if (line.type === 'comment') {
+            html += `<div class="comment">${rtfEscape(line.content || '')}</div>`;
+        } else if (line.type === 'lyrics' && line.items) {
+            if (line.items.length === 0) {
+                html += `<br>`;
+                return;
+            }
             line.items.forEach(item => {
                 const chord = simplifyChordDisplay(item.chord);
                 const lyrics = item.lyrics || '';
                 if (chord) {
-                    chordLine += chord;
-                    const padding = Math.max(0, lyrics.length - chord.length);
-                    chordLine += ' '.repeat(padding);
-                } else { chordLine += ' '.repeat(lyrics.length); }
-                lyricLine += lyrics;
+                    html += `<span class="chord">[${rtfEscape(chord)}]</span>`;
+                }
+                html += `<span class="lyrics-line">${rtfEscape(lyrics)}</span>`;
             });
-            html += `<div class="line-pair"><div class="chord-line">${chordLine}</div><div class="lyric-line">${lyricLine}</div></div>`;
+            html += `<br>`;
+        } else if (line.type === 'chorus_start' || line.type === 'chorus_end') {
+            // Chorus blocks are not explicitly styled in the new HTML structure,
+            // but we can add a visual cue or log it. For now, just a simple br.
+            // html += `<br>`; 
+            // No specific rendering for chorus blocks in this simplified HTML version
         }
     });
-    
+
     const footerMeta = songToFormat.meta || {};
     if (showFooter) {
-        let footerContent = '';
+         let footerContent = '';
         if (footerMeta.ccli) footerContent += `CCLI Song #${footerMeta.ccli}<br>`;
         if (footerMeta.copyright) footerContent += `${footerMeta.copyright}<br>`;
         if (footerMeta.footer) footerContent += `${footerMeta.footer}<br>`;
-        
         if (songToFormat.footer_comments && songToFormat.footer_comments.length > 0) {
             if (footerContent) footerContent += '<br>'; 
-            footerContent += songToFormat.footer_comments.join('<br>');
+            footerContent += songToFormat.footer_comments.map(fc => rtfEscape(fc)).join('<br>');
         }
-        
-        if(footerContent) {
-            html += `<div class="footer">${footerContent}</div>`;
-        }
+        if(footerContent) { html += `<div class="footer">${footerContent}</div>`; }
     }
     html += `</div></body></html>`;
     return html;
   }, [processedSong, simplifyChords, showArtist, showFooter]);
 
+
   const generateRtfContent = () => {
     if (!processedSong) return null;
-    addLog("--- GENERATING RTF (Monospaced) ---");
-
-    const rtfEscape = (str: string | undefined) => String(str || '').replace(/\\/g, '\\\\').replace(/{/g, '\\{').replace(/}/g, '\\}');
+    addLog("--- GENERATING RTF (Arial 18pt) ---");
     
     let rtf = `{\\rtf1\\ansi\\deff0`;
-    rtf += `{\\fonttbl{\\f0 Arial;}{\\f1 Courier New;}}`; // Font table: F0=Arial, F1=Courier New
-    rtf += `{\\colortbl;\\red255\\green0\\blue0;\\red0\\green0\\blue0;}`; // Color table: Color 1=Red, Color 2=Black (default)
-    rtf += `\\pard\\sa200\\sl276\\slmult1\\f0\\fs24`; // Default paragraph settings
+    rtf += `{\\fonttbl{\\f0 Arial;}}`;
+    rtf += `{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red128\\green128\\blue128;}`; // 0:black, 1:red, 2:gray
+    rtf += `\\pard\\slmult1\\f0\\fs36`; 
 
-    // === DOCUMENT HEADER ===
-    rtf += `{\\pard\\qc\\b\\f0\\fs32 ${rtfEscape(processedSong.title)}\\par}`;
+    rtf += `{\\pard\\qc\\b\\fs48 ${rtfEscape(processedSong.title)}\\par}`; 
+    let metaInfo = '';
     if (showArtist && processedSong.artist) {
-        rtf += `{\\pard\\qc\\b0\\fs24 Artist: ${rtfEscape(processedSong.artist)}\\par}`;
+        metaInfo += `Artist: ${rtfEscape(processedSong.artist)}   `;
     }
-    rtf += `{\\pard\\qc\\b0\\fs24 Key: ${rtfEscape(processedSong.key)}\\par}`;
-    rtf += `\\par`; // Extra space
+    metaInfo += `Key: ${rtfEscape(processedSong.key)}`;
+    rtf += `{\\pard\\qc\\cf2\\fs28 ${metaInfo}\\par}`; 
+    rtf += `\\par\\par`; 
 
-    // === DOCUMENT BODY ===
-    let inChorus = false;
-    processedSong.body.forEach(line => {
+    processedSong.body.forEach((line, index) => {
         if (line.type === 'section') {
-            rtf += `{\\pard\\sa200\\sl276\\slmult1\\b\\f0\\fs24 ${rtfEscape(line.content)}\\par}`;
+            if (index > 0) {
+                rtf += `\\par\\par`; 
+            }
+            rtf += `{\\b ${rtfEscape(line.content || '')}}`;
         } else if (line.type === 'comment') {
-            rtf += `{\\pard\\sa200\\sl276\\slmult1\\i\\f0\\fs24 ${rtfEscape(line.content)}\\par}`;
-        } else if (line.type === 'chorus_start') {
-            inChorus = true;
-            rtf += `{\\pard\\li720\\sa100\\sl276\\slmult1 `; // Start indented block
-        } else if (line.type === 'chorus_end') {
-            inChorus = false;
-            rtf += `\\par}`; // End indented block
+            rtf += `{\\i ${rtfEscape(line.content || '')}}`;
         } else if (line.type === 'lyrics' && line.items) {
-            if (line.items.length === 0) {
-                rtf += `{\\pard${inChorus ? '\\li720': ''}\\sa200\\sl276\\slmult1\\fs24 \\par}`;
-                return; 
+            if (line.items.length === 0) { // Handle empty lyric lines for spacing
+                 rtf += `\\par`; // This will add a paragraph break, creating a blank line
+            } else {
+                rtf += `\\pard\\slmult1\\f0\\fs36 `; 
+                line.items.forEach(item => {
+                    const chord = simplifyChordDisplay(item.chord); 
+                    const lyrics = item.lyrics || '';
+                    if (chord) {
+                        rtf += `{\\b\\cf1 [${rtfEscape(chord)}]}`;
+                    }
+                    rtf += `{\\cf0 ${rtfEscape(lyrics)}}`;
+                });
             }
-            
-            let chordLine = '';
-            let lyricLine = '';
-
-            line.items.forEach(item => {
-                const chord = simplifyChordDisplay(item.chord) || '';
-                const lyrics = item.lyrics || '';
-                if (chord) {
-                    chordLine += chord;
-                    const padding = Math.max(0, lyrics.length - chord.length);
-                    chordLine += ' '.repeat(padding);
-                } else {
-                    chordLine += ' '.repeat(lyrics.length);
-                }
-                lyricLine += lyrics;
-            });
-            
-            if (chordLine.trim().length > 0) {
-                rtf += `{\\pard${inChorus ? '\\li720': ''}\\sa100\\sl276\\slmult1\\f1\\fs24\\cf1 ${rtfEscape(chordLine)}\\par}`;
-            }
-            rtf += `{\\pard${inChorus ? '\\li720': ''}\\sa200\\sl276\\slmult1\\f1\\fs24\\cf2 ${rtfEscape(lyricLine)}\\par}`; // cf2 for black lyrics
+        } else if (line.type === 'chorus_start') {
+             // RTF doesn't have direct chorus block styling like HTML.
+             // We could add a "Chorus:" comment or similar if desired.
+             // For now, just ensure it doesn't break.
+        } else if (line.type === 'chorus_end') {
+            // Similar to chorus_start.
+        }
+        // Add paragraph break after every line from body, unless it was an empty lyrics line already handled
+        if (!(line.type === 'lyrics' && line.items && line.items.length === 0)) {
+             rtf += `\\par\n`;
         }
     });
-    if (inChorus) { // Ensure any open chorus block is closed
-        rtf += `\\par}`;
-    }
     
-    // === FOOTER ===
+    rtf += `\\par\\par{\\pard\\qc\\cf2\\fs20 `; 
+    const footerMeta = processedSong.meta || {};
     if (showFooter) {
-        rtf += `\\par{\\pard\\qc\\sa200\\sl276\\slmult1\\fs18 `;
-        const footerMeta = processedSong.meta || {};
         let footerRtf = '';
-        if (footerMeta.ccli) footerRtf += `CCLI Song #${rtfEscape(footerMeta.ccli)} `;
-        if (footerMeta.copyright) footerRtf += rtfEscape(footerMeta.copyright);
-        if (footerMeta.footer) footerRtf += (footerRtf.trim() ? `\\par ` : ``) + rtfEscape(footerMeta.footer);
-
+        if (footerMeta.ccli) footerRtf += `CCLI Song #${rtfEscape(footerMeta.ccli)}\\line `;
+        if (footerMeta.copyright) footerRtf += `${rtfEscape(footerMeta.copyright)}\\line `;
+        if (footerMeta.footer) footerRtf += `${rtfEscape(footerMeta.footer)}\\line `;
         if (processedSong.footer_comments && processedSong.footer_comments.length > 0) {
-            if(footerRtf.trim()) footerRtf += '\\par ';
-            footerRtf += processedSong.footer_comments.map(line => rtfEscape(line)).join('\\par ');
+            if(footerRtf.trim() && !footerRtf.endsWith('\\line ')) footerRtf += '\\line ';
+            else if (footerRtf.trim()) {} // already ends with a line break
+            else {} // footerRtf is empty, no need to add a line break before
+            footerRtf += processedSong.footer_comments.map(fc => rtfEscape(fc)).join('\\line ');
         }
-        
-        if (footerRtf.trim()) {
-          rtf += footerRtf;
-          rtf += `\\par`; 
+        // Remove trailing \line if it exists
+        if (footerRtf.endsWith('\\line ')) {
+            footerRtf = footerRtf.substring(0, footerRtf.length - '\\line '.length);
         }
-        rtf += `}`; 
+        rtf += footerRtf;
     }
-    rtf += `}`; // Close main RTF document
+    rtf += `\\par}}`; 
     return rtf;
   };
   
@@ -557,5 +567,7 @@ export default function ChordProPage() {
     </div>
   );
 }
+
+    
 
     
