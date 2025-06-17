@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Music, FileText, Download, FileUp, Workflow, TerminalSquare, Eye, Save, FolderOpen, Loader2 } from 'lucide-react';
+import { Music, FileText, Download, FileUp, Workflow, TerminalSquare, Eye, Save, FolderOpen } from 'lucide-react';
 import { useDebounce } from '@/hooks/use-debounce';
 import { CustomParserV9, type ParsedSong } from '@/lib/chordpro-parser';
 import { CustomTransposer } from '@/lib/chord-transposer';
@@ -173,7 +173,7 @@ export default function ChordProPage() {
     if (!processedSong) return '';
     addLog("--- RE-GENERATING HTML ---");
     const songToFormat = processedSong;
-    let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${songToFormat.title}</title><link href="https://fonts.googleapis.com/css2?family=Fira+Mono&family=Geist+Sans:wght@700&display=swap" rel="stylesheet"><style>body{font-family:'Geist Sans','Verdana',sans-serif;margin:2em;font-weight:bold;}.cpro{width:100%;}h1{font-size:16pt;text-align:center;}.meta-info{font-size:16pt;text-align:center;margin-bottom:2em;}.line-pair{margin-bottom:.8em;}.chord-line,.lyric-line{font-family:'Fira Mono','Courier New',monospace;font-size:14pt;white-space:pre;line-height:1.2;}.chord-line{color:#FF8C00; /* Accent Orange */}.section{font-weight:bold;margin-top:1.2em;margin-bottom:.25em;font-size:14pt;}.comment{font-style:italic;color:#666;margin-bottom:.5em;font-size:14pt;}.chorus-block{padding-left:20px;border-left:2px solid #ccc;margin-left:5px;margin-top:.5em;margin-bottom:.5em;}.footer{font-size:9pt;color:#888;margin-top:3em;text-align:center;}</style></head><body><div class="cpro"><h1>${songToFormat.title}</h1><div class="meta-info">`;
+    let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${songToFormat.title}</title><link href="https://cdn.jsdelivr.net/npm/dejavu-sans@1.0.0/css/dejavu-sans.min.css" rel="stylesheet"><link href="https://cdn.jsdelivr.net/npm/dejavu-sans-mono@1.0.0/css/dejavu-sans-mono.min.css" rel="stylesheet"><style>body{font-family:'DejaVu Sans',Verdana,sans-serif;margin:2em;font-weight:bold;}.cpro{width:100%;}h1{font-size:16pt;text-align:center;}.meta-info{font-size:16pt;text-align:center;margin-bottom:2em;}.line-pair{margin-bottom:.8em;}.chord-line,.lyric-line{font-family:'DejaVu Sans Mono','Courier New',monospace;font-size:14pt;white-space:pre;line-height:1.2;}.chord-line{color:#ff0000;}.section{font-weight:bold;margin-top:1.2em;margin-bottom:.25em;font-size:14pt;}.comment{font-style:italic;color:#666;margin-bottom:.5em;font-size:14pt;}.chorus-block{padding-left:20px;border-left:2px solid #ccc;margin-left:5px;margin-top:.5em;margin-bottom:.5em;}.footer{font-size:9pt;color:#888;margin-top:3em;text-align:center;}</style></head><body><div class="cpro"><h1>${songToFormat.title}</h1><div class="meta-info">`;
     if (showArtist && songToFormat.artist) html += `Artist: ${songToFormat.artist}<br/>`;
     html += `Key: ${songToFormat.key}<br/>`;
     html += `</div>`;
@@ -222,76 +222,89 @@ export default function ChordProPage() {
 
   const generateRtfContent = () => {
     if (!processedSong) return null;
-    addLog("--- GENERATING RTF ---");
+    addLog("--- GENERATING RTF (Monospaced) ---");
+
     const rtfEscape = (str: string | undefined) => String(str || '').replace(/\\/g, '\\\\').replace(/{/g, '\\{').replace(/}/g, '\\}');
-    let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}{\\f1 Courier New;}}{\\colortbl;\\red255\\green0\\blue0;}`; // Red color for chords
     
-    rtf += `{\\pard\\qc\\sa200\\sl276\\slmult1\\b\\f0\\fs32 ${rtfEscape(processedSong.title)}\\par}`;
-    if (showArtist && processedSong.artist) { rtf += `{\\pard\\qc\\b0\\fs24 Artist: ${rtfEscape(processedSong.artist)}\\par}`; }
-    rtf += `{\\pard\\qc\\b0\\fs24 Key: ${rtfEscape(processedSong.key)}\\par}\\par`;
-    
+    let rtf = `{\\rtf1\\ansi\\deff0`;
+    rtf += `{\\fonttbl{\\f0 Arial;}{\\f1 Courier New;}}`; // Font table: F0=Arial, F1=Courier New
+    rtf += `{\\colortbl;\\red255\\green0\\blue0;\\red0\\green0\\blue0;}`; // Color table: Color 1=Red, Color 2=Black (default)
+    rtf += `\\pard\\sa200\\sl276\\slmult1\\f0\\fs24`; // Default paragraph settings
+
+    // === DOCUMENT HEADER ===
+    rtf += `{\\pard\\qc\\b\\f0\\fs32 ${rtfEscape(processedSong.title)}\\par}`;
+    if (showArtist && processedSong.artist) {
+        rtf += `{\\pard\\qc\\b0\\fs24 Artist: ${rtfEscape(processedSong.artist)}\\par}`;
+    }
+    rtf += `{\\pard\\qc\\b0\\fs24 Key: ${rtfEscape(processedSong.key)}\\par}`;
+    rtf += `\\par`; // Extra space
+
+    // === DOCUMENT BODY ===
     let inChorus = false;
     processedSong.body.forEach(line => {
-        if (line.type === 'section') { rtf += `{\\pard\\sa200\\sl276\\slmult1\\b\\f0\\fs24 ${rtfEscape(line.content)}\\par}`; }
-        else if (line.type === 'comment') { rtf += `{\\pard\\sa200\\sl276\\slmult1\\i\\f0\\fs24 ${rtfEscape(line.content)}\\par}`; }
-        else if (line.type === 'chorus_start') { 
-            rtf += `{\\pard\\li720\\sa100\\sl276\\slmult1 `; 
+        if (line.type === 'section') {
+            rtf += `{\\pard\\sa200\\sl276\\slmult1\\b\\f0\\fs24 ${rtfEscape(line.content)}\\par}`;
+        } else if (line.type === 'comment') {
+            rtf += `{\\pard\\sa200\\sl276\\slmult1\\i\\f0\\fs24 ${rtfEscape(line.content)}\\par}`;
+        } else if (line.type === 'chorus_start') {
             inChorus = true;
-        }
-        else if (line.type === 'chorus_end') { 
-            rtf += `\\par}`; 
+            rtf += `{\\pard\\li720\\sa100\\sl276\\slmult1 `; // Start indented block
+        } else if (line.type === 'chorus_end') {
             inChorus = false;
-        }
-        else if (line.type === 'lyrics' && line.items) {
-            if (line.items.length === 0) { 
+            rtf += `\\par}`; // End indented block
+        } else if (line.type === 'lyrics' && line.items) {
+            if (line.items.length === 0) {
                 rtf += `{\\pard${inChorus ? '\\li720': ''}\\sa200\\sl276\\slmult1\\fs24 \\par}`;
                 return; 
             }
             
-            rtf += `{\\pard${inChorus ? '\\li720': ''}\\sa100\\sl276\\slmult1\\trowd \\trgaph108\\trleft-108`;
-            
-            let chordsRow = '';
-            let lyricsRow = '';
-            let cellsDef = '';
-            let currentPos = 0;
-            
+            let chordLine = '';
+            let lyricLine = '';
+
             line.items.forEach(item => {
                 const chord = simplifyChordDisplay(item.chord) || '';
-                const lyrics = item.lyrics || ' '; 
-                const text = chord.length > lyrics.length ? chord : lyrics;
-                const cellWidth = Math.floor(text.length * 150) + 200; 
-                currentPos += cellWidth;
-                
-                chordsRow += `{\\pard\\intbl\\b\\cf1\\f1\\fs24 ${rtfEscape(chord)}\\cell}`;
-                lyricsRow += `{\\pard\\intbl\\b0\\cf0\\f0\\fs24 ${rtfEscape(lyrics)}\\cell}`;
-                cellsDef += `\\clbrdrb\\brdrs\\clbrdrl\\brdrs\\clbrdrr\\brdrs\\clbrdrt\\brdrs\\cellx${currentPos}`;
+                const lyrics = item.lyrics || '';
+                if (chord) {
+                    chordLine += chord;
+                    const padding = Math.max(0, lyrics.length - chord.length);
+                    chordLine += ' '.repeat(padding);
+                } else {
+                    chordLine += ' '.repeat(lyrics.length);
+                }
+                lyricLine += lyrics;
             });
-
-            rtf += cellsDef + chordsRow + `\\row` + lyricsRow + `\\row}`;
-            rtf += `}`; 
+            
+            if (chordLine.trim().length > 0) {
+                rtf += `{\\pard${inChorus ? '\\li720': ''}\\sa100\\sl276\\slmult1\\f1\\fs24\\cf1 ${rtfEscape(chordLine)}\\par}`;
+            }
+            rtf += `{\\pard${inChorus ? '\\li720': ''}\\sa200\\sl276\\slmult1\\f1\\fs24\\cf2 ${rtfEscape(lyricLine)}\\par}`; // cf2 for black lyrics
         }
     });
-
+    if (inChorus) { // Ensure any open chorus block is closed
+        rtf += `\\par}`;
+    }
+    
+    // === FOOTER ===
     if (showFooter) {
-        rtf += `{\\pard\\qc\\sa200\\sl276\\slmult1\\fs18 `;
+        rtf += `\\par{\\pard\\qc\\sa200\\sl276\\slmult1\\fs18 `;
         const footerMeta = processedSong.meta || {};
-        let footerContentString = "";
-        if (footerMeta.ccli) { footerContentString += `CCLI Song #${rtfEscape(footerMeta.ccli)} `; }
-        if (footerMeta.copyright) { footerContentString += rtfEscape(footerMeta.copyright); }
-        if (footerMeta.footer) { footerContentString += (footerContentString.trim() ? `\\par ` : ``) + rtfEscape(footerMeta.footer); }
+        let footerRtf = '';
+        if (footerMeta.ccli) footerRtf += `CCLI Song #${rtfEscape(footerMeta.ccli)} `;
+        if (footerMeta.copyright) footerRtf += rtfEscape(footerMeta.copyright);
+        if (footerMeta.footer) footerRtf += (footerRtf.trim() ? `\\par ` : ``) + rtfEscape(footerMeta.footer);
 
         if (processedSong.footer_comments && processedSong.footer_comments.length > 0) {
-            if (footerContentString.trim()) footerContentString += '\\par '; 
-            footerContentString += processedSong.footer_comments.map(line => rtfEscape(line)).join('\\par ');
+            if(footerRtf.trim()) footerRtf += '\\par ';
+            footerRtf += processedSong.footer_comments.map(line => rtfEscape(line)).join('\\par ');
         }
         
-        if (footerContentString.trim()) {
-          rtf += footerContentString;
+        if (footerRtf.trim()) {
+          rtf += footerRtf;
           rtf += `\\par`; 
         }
         rtf += `}`; 
     }
-    rtf += `}`; 
+    rtf += `}`; // Close main RTF document
     return rtf;
   };
   
@@ -544,3 +557,5 @@ export default function ChordProPage() {
     </div>
   );
 }
+
+    
