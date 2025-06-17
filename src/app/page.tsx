@@ -396,16 +396,16 @@ const ChordProImporter = () => {
         let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${rtfEscape(songToFormat.title)}</title>
             <link href="https://cdn.jsdelivr.net/npm/dejavu-sans-mono@1.0.0/css/dejavu-sans-mono.min.css" rel="stylesheet">
             <style>
-                body { font-family: 'DejaVu Sans Mono', Menlo, Monaco, Consolas, monospace; font-size: 18pt; line-height: 1.2; } /* Default body font */
+                body { font-family: 'DejaVu Sans Mono', Menlo, Monaco, Consolas, monospace; font-size: 18pt; line-height: 1.2; }
                 .cpro { width: 100%; }
                 h1 { font-size: 24pt; text-align: center; font-weight: bold; color: black; margin-bottom: 0; font-family: Arial, sans-serif; }
                 .meta-info { font-size: 14pt; text-align: center; color: black; font-weight: bold; margin-bottom: 36px; font-family: Arial, sans-serif; }
                 .line-pair { margin-bottom: 18pt; }
-                .chord-line, .lyric-line { font-family: 'DejaVu Sans Mono', Menlo, Monaco, Consolas, monospace; font-size: 18pt; white-space: pre; font-weight: bold; } /* Song content uses DejaVu Sans Mono Bold */
-                .lyric-line { color: black; /* font-weight already in common rule */ }
-                .chord-line { color: #ff0000; /* font-weight already in common rule */ }
+                .chord-line, .lyric-line { font-family: 'DejaVu Sans Mono', Menlo, Monaco, Consolas, monospace; font-size: 18pt; white-space: pre; font-weight: bold; } 
+                .lyric-line { color: black; }
+                .chord-line { color: #ff0000; }
                 .section { font-weight: bold; color: black; font-family: Arial, sans-serif; }
-                .comment { color: black; font-weight: bold; font-family: Arial, sans-serif; } /* No italics, black, bold */
+                .comment { color: black; font-weight: bold; font-family: Arial, sans-serif; } 
                 .footer { font-size: 10pt; color: black; font-weight: bold; margin-top: 36px; text-align: center; font-family: Arial, sans-serif; }
             </style></head><body><div class="cpro"><h1>${rtfEscape(songToFormat.title)}</h1>`;
         
@@ -413,17 +413,17 @@ const ChordProImporter = () => {
         if (showArtist && songToFormat.artist) {
             metaHtml += `Artist: ${rtfEscape(songToFormat.artist)}<br/>`;
         }
-        metaHtml += `Key: <span style="font-family: 'DejaVu Sans Mono', Menlo, Monaco, Consolas, monospace; color: #ff0000; font-weight: bold; font-size: 14pt;">${rtfEscape(songToFormat.key)}</span></div>`; 
+        metaHtml += `<span class="chord-line" style="font-family: Arial, sans-serif;">Key: ${rtfEscape(songToFormat.key)}</span></div>`; 
         html += metaHtml;
 
         songToFormat.body.forEach((line, index) => {
             if (line.type === 'section') {
-                if (index > 0) html += `<br><br>`; // Two blank lines before section
+                if (index > 0) html += `<br><br>`; 
                 html += `<div class="section">${rtfEscape(line.content)}</div>`;
             } else if (line.type === 'comment') {
                 html += `<div class="comment">${rtfEscape(line.content)}</div>`;
             } else if (line.type === 'lyrics' && line.items) {
-                if (line.items.length === 0) { /* Do not render <br> for empty lines within sections */ return; } 
+                if (line.items.length === 0) { return; } 
                 
                 let chordLine = '';
                 let lyricLine = '';
@@ -473,7 +473,7 @@ const ChordProImporter = () => {
 
     const generateRtfContent = () => {
         if (!processedSong) return null;
-        addLog("--- GENERATING RTF (Final Formatting - Arial) ---");
+        addLog("--- GENERATING RTF (Arial, Corrected Spacing & Meta Brace) ---");
         const songToFormat = processedSong;
         
         let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red128\\green128\\blue128;}\\pard\\slmult1\\f0\\fs36`;
@@ -484,7 +484,8 @@ const ChordProImporter = () => {
         if (showArtist && songToFormat.artist) {
             metaRtf += `Artist: ${rtfEscape(songToFormat.artist)}   `;
         }
-        metaRtf += `{\\b\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}}`; 
+        metaRtf += `{\\b\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}`;
+        metaRtf += `}`; 
         rtf += metaRtf + `\\par`;
         
         songToFormat.body.forEach((line, index) => {
@@ -550,7 +551,7 @@ const ChordProImporter = () => {
     
     const generateRtfContentMono = () => {
         if (!processedSong) return null;
-        addLog("--- GENERATING RTF (Final Formatting - Mono) ---");
+        addLog("--- GENERATING RTF (Mono, Corrected Spacing & Meta Brace) ---");
         const songToFormat = processedSong;
         
         let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Courier New;}{\\f1 Arial;}}{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red128\\green128\\blue128;}\\pard\\slmult1\\f0\\fs36`;
