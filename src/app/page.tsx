@@ -390,31 +390,29 @@ const ChordProImporter = () => {
 
     const processedSongHtml = useMemo(() => {
         if (!processedSong) return '';
-        addLog("--- RE-GENERATING HTML (DejaVu Sans Mono Bold for song content) ---");
+        addLog("--- RE-GENERATING HTML (DejaVu Sans Mono Bold, Black Text) ---");
         const songToFormat = processedSong;
         
-        let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${songToFormat.title}</title>
+        let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${rtfEscape(songToFormat.title)}</title>
             <link href="https://cdn.jsdelivr.net/npm/dejavu-sans-mono@1.0.0/css/dejavu-sans-mono.min.css" rel="stylesheet">
             <style>
-                body { font-family: 'DejaVu Sans Mono', 'Courier New', monospace; font-size: 18pt; line-height: 1.2; } /* Base font for song content */
+                body { font-family: 'DejaVu Sans Mono', 'Courier New', monospace; font-weight: bold; font-size: 18pt; line-height: 1.2; }
                 .cpro { width: 100%; }
                 h1 { font-family: Arial, sans-serif; font-size: 24pt; text-align: center; font-weight: bold; color: black; margin-bottom: 0; }
-                .meta-info { font-family: Arial, sans-serif; font-size: 14pt; text-align: center; color: #888; margin-bottom: 36px; }
+                .meta-info { font-family: Arial, sans-serif; font-size: 14pt; text-align: center; color: black; font-weight: bold; margin-bottom: 36px; }
                 .line-pair { margin-bottom: 18pt; }
-                .chord-line, .lyric-line { white-space: pre; font-weight: bold; /* Inherits font-family from body */ }
-                .chord-line { color: #ff0000; } /* Already bold, inherits font-family */
-                .lyric-line { color: black; } /* Now bold, inherits font-family */
-                .section { font-family: Arial, sans-serif; font-weight: bold; color: black; } /* Stays Arial */
-                .comment { font-family: Arial, sans-serif; font-style: italic; color: #666; } /* Stays Arial */
-                .footer { font-family: Arial, sans-serif; font-size: 10pt; color: #888; margin-top: 36px; text-align: center; } /* Stays Arial */
+                .chord-line, .lyric-line { white-space: pre; /* Inherits font-family and font-weight from body */ }
+                .chord-line { color: #ff0000; /* Inherits font-weight from body */ }
+                .lyric-line { color: black; /* Inherits font-weight from body */ }
+                .section { font-family: Arial, sans-serif; font-weight: bold; color: black; } 
+                .comment { font-family: Arial, sans-serif; color: black; font-weight: bold; }
+                .footer { font-family: Arial, sans-serif; font-size: 10pt; color: black; font-weight: bold; margin-top: 36px; text-align: center; }
             </style></head><body><div class="cpro"><h1>${rtfEscape(songToFormat.title)}</h1>`;
         
         let metaHtml = '<div class="meta-info">';
         if (showArtist && songToFormat.artist) {
             metaHtml += `Artist: ${rtfEscape(songToFormat.artist)}<br/>`;
         }
-        // The "Key: " label part will be Arial due to .meta-info style.
-        // The key value itself will be DejaVu Sans Mono, red, bold due to .chord-line inheriting from body for font-family.
         metaHtml += `Key: <span class="chord-line">${rtfEscape(songToFormat.key)}</span></div>`; 
         html += metaHtml;
 
@@ -433,7 +431,8 @@ const ChordProImporter = () => {
                     html += `<div style="height: 18pt;"></div>`; 
                     lastLineWasSection = false;
                 }
-                if (line.items.length === 0) { html += `<br>`; return; }
+                // Do not render a <br> for empty lyric lines to remove blank lines within sections
+                if (line.items.length === 0) { return; } 
                 
                 let chordLine = '';
                 let lyricLine = '';
@@ -443,7 +442,6 @@ const ChordProImporter = () => {
                     
                     let effectiveLength = lyrics.length;
                     if (itemIndex > 0) {
-                        // Adjusted spacing calculation based on previous successful merge
                         effectiveLength = Math.round(effectiveLength * 1.5); 
                     }
 
@@ -515,7 +513,7 @@ const ChordProImporter = () => {
                     lastLineWasSection = false;
                 }
                 if (line.items.length === 0) {
-                    rtf += `{\\pard\\par}`; return;
+                    rtf += `\\par`; return;
                 }
                 
                 let chordLine = '';
@@ -525,7 +523,6 @@ const ChordProImporter = () => {
                     const lyrics = item.lyrics || '';
                     let effectiveLength = lyrics.length;
                     if (itemIndex > 0) {
-                        // Adjusted spacing calculation based on previous successful merge
                         effectiveLength = Math.round(effectiveLength * 1.5); 
                     }
                     if (chord) {
@@ -538,10 +535,11 @@ const ChordProImporter = () => {
                     lyricLine += lyrics;
                 });
                 
+                rtf += `{\\pard\\slmult1\\f0\\fs36`;
                 if (chordLine.trim().length > 0) {
-                    rtf += `{\\pard\\slmult1\\f0\\fs36\\b\\cf1 ${rtfEscape(chordLine)}\\par}`;
+                    rtf += `{\\b\\cf1 ${rtfEscape(chordLine)}}\\par`;
                 }
-                rtf += `{\\pard\\slmult1\\f0\\fs36\\cf0 ${rtfEscape(lyricLine)}\\par}`;
+                rtf += `{\\cf0 ${rtfEscape(lyricLine)}}\\par}`;
             }
         });
         
@@ -582,7 +580,7 @@ const ChordProImporter = () => {
         if (showArtist && songToFormat.artist) {
             metaRtf += `Artist: ${rtfEscape(songToFormat.artist)}   `;
         }
-        metaRtf += `{\\b\\f1\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}}`;
+        metaRtf += `{\\b\\f1\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}`;
         metaRtf += `}`; 
         rtf += metaRtf + `\\par`;
         
@@ -597,7 +595,7 @@ const ChordProImporter = () => {
                 lastLineWasSection = false;
             } else if (line.type === 'lyrics' && line.items) {
                 if (lastLineWasSection) { rtf += `\\par`; lastLineWasSection = false; }
-                if (line.items.length === 0) { rtf += `{\\pard\\par}`; return; }
+                if (line.items.length === 0) { rtf += `\\par`; return; }
                 
                 let chordLine = '';
                 let lyricLine = '';
@@ -606,7 +604,6 @@ const ChordProImporter = () => {
                     const lyrics = item.lyrics || '';
                     let effectiveLength = lyrics.length;
                     if (itemIndex > 0) {
-                        // Adjusted spacing calculation based on previous successful merge
                         effectiveLength = Math.round(effectiveLength * 1.5); 
                     }
                     if (chord) {
@@ -619,10 +616,11 @@ const ChordProImporter = () => {
                     lyricLine += lyrics;
                 });
                 
+                rtf += `{\\pard\\slmult1\\f0\\fs36`;
                 if (chordLine.trim().length > 0) {
-                    rtf += `{\\pard\\slmult1\\f0\\fs36\\b\\cf1 ${rtfEscape(chordLine)}\\par}`;
+                    rtf += `{\\b\\cf1 ${rtfEscape(chordLine)}}\\par`;
                 }
-                rtf += `{\\pard\\slmult1\\f0\\fs36\\cf0 ${rtfEscape(lyricLine)}\\par}`;
+                rtf += `{\\cf0 ${rtfEscape(lyricLine)}}\\par}`;
             }
         });
         
@@ -697,8 +695,6 @@ const ChordProImporter = () => {
         const logContent = log.slice().reverse().join('\n\n'); // Newest entries at the bottom
         createAndDownloadBlob(logContent, 'text/plain', 'txt');
     };
-
-    const musicalKeys = ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"];
 
 
     return (
@@ -836,3 +832,4 @@ export default function App() {
     </div>
   );
 }
+
