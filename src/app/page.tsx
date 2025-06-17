@@ -184,6 +184,8 @@ const SermonBuilder = ({ apiKey }: { apiKey: string }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const rtfEscapeSermon = (str: string | undefined): string => String(str || '').replace(/\\/g, '\\\\').replace(/{/g, '\\{').replace(/}/g, '\\}');
+
   const handleParse = async () => {
     if (!verseInput) return;
     if (!apiKey) {
@@ -218,13 +220,11 @@ const SermonBuilder = ({ apiKey }: { apiKey: string }) => {
     }
   };
   
-  const rtfEscape = (str: string | undefined): string => String(str || '').replace(/\\/g, '\\\\').replace(/{/g, '\\{').replace(/}/g, '\\}');
-
   const handleGenerateRtf = () => {
     let rtf = `{\\rtf1\\ansi\\deff0 {\\fonttbl{\\f0 Arial;}} \\fs24`;
     parsedVerses.forEach(verse => {
-        rtf += `{\\pard\\b ${rtfEscape(verse.reference)}\\b0\\par}`;
-        rtf += `{\\pard ${rtfEscape(verse.text.replace(/\n/g, '\\par '))}\\par}`;
+        rtf += `{\\pard\\b ${rtfEscapeSermon(verse.reference)}\\b0\\par}`;
+        rtf += `{\\pard ${rtfEscapeSermon(verse.text.replace(/\n/g, '\\par '))}\\par}`;
         rtf += `{\\pard\\par}`;
     });
     rtf += `}`;
@@ -396,7 +396,7 @@ const ChordProImporter = () => {
         let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${rtfEscape(songToFormat.title)}</title>
             <link href="https://cdn.jsdelivr.net/npm/dejavu-sans-mono@1.0.0/css/dejavu-sans-mono.min.css" rel="stylesheet">
             <style>
-                body { font-family: Arial, sans-serif; font-size: 18pt; line-height: 1.2; } /* Default body font */
+                body { font-family: 'DejaVu Sans Mono', Menlo, Monaco, Consolas, monospace; font-size: 18pt; line-height: 1.2; } /* Default body font */
                 .cpro { width: 100%; }
                 h1 { font-size: 24pt; text-align: center; font-weight: bold; color: black; margin-bottom: 0; font-family: Arial, sans-serif; }
                 .meta-info { font-size: 14pt; text-align: center; color: black; font-weight: bold; margin-bottom: 36px; font-family: Arial, sans-serif; }
@@ -413,7 +413,6 @@ const ChordProImporter = () => {
         if (showArtist && songToFormat.artist) {
             metaHtml += `Artist: ${rtfEscape(songToFormat.artist)}<br/>`;
         }
-        // Key: label uses meta-info style (Arial), key value uses chord-line style (DejaVu Sans Mono Bold Red)
         metaHtml += `Key: <span style="font-family: 'DejaVu Sans Mono', Menlo, Monaco, Consolas, monospace; color: #ff0000; font-weight: bold; font-size: 14pt;">${rtfEscape(songToFormat.key)}</span></div>`; 
         html += metaHtml;
 
@@ -421,20 +420,17 @@ const ChordProImporter = () => {
 
         songToFormat.body.forEach((line, index) => {
             if (line.type === 'section') {
-                if (index > 0) html += `<br><br>`;
-                html += `<div class="section">${rtfEscape(line.content || '')}</div>`;
+                if (index > 0) html += `<br><br>`; // Two blank lines before section
+                html += `<div class="section">${rtfEscape(line.content)}</div>`;
                 lastLineWasSection = true;
             } else if (line.type === 'comment') {
-                html += `<div class="comment">${rtfEscape(line.content || '')}</div>`;
+                html += `<div class="comment">${rtfEscape(line.content)}</div>`;
                 lastLineWasSection = false;
             } else if (line.type === 'lyrics' && line.items) {
-                if (lastLineWasSection) {
-                    html += `<div style="height: 18pt;"></div>`; 
-                    lastLineWasSection = false;
-                }
+                // Removed the 18pt spacer div that was here after a section title
+                lastLineWasSection = false; // Reset flag as we are now in lyrics/content
                 
-                // Do not render a <br> for empty lines, effectively removing them within sections
-                if (line.items.length === 0) { return; } 
+                if (line.items.length === 0) { /* Do not render <br> for empty lines within sections */ return; } 
                 
                 let chordLine = '';
                 let lyricLine = '';
@@ -504,10 +500,10 @@ const ChordProImporter = () => {
         processedSong.body.forEach((line, index) => {
             if (line.type === 'section') {
                 if (index > 0) rtf += `\\par\\par`;
-                rtf += `{\\b ${rtfEscape(line.content || '')}}`;
+                rtf += `{\\b ${rtfEscape(line.content)}}`;
                 lastLineWasSection = true;
             } else if (line.type === 'comment') {
-                rtf += `{\\i ${rtfEscape(line.content || '')}}`;
+                rtf += `{\\i ${rtfEscape(line.content)}}`;
                 lastLineWasSection = false;
             } else if (line.type === 'lyrics' && line.items) {
                 if (lastLineWasSection) {
@@ -591,10 +587,10 @@ const ChordProImporter = () => {
         processedSong.body.forEach((line, index) => {
             if (line.type === 'section') {
                 if (index > 0) rtf += `\\par\\par`;
-                rtf += `{\\b\\f1 ${rtfEscape(line.content || '')}}`;
+                rtf += `{\\b\\f1 ${rtfEscape(line.content)}}`;
                 lastLineWasSection = true;
             } else if (line.type === 'comment') {
-                rtf += `{\\i\\f1 ${rtfEscape(line.content || '')}}`;
+                rtf += `{\\i\\f1 ${rtfEscape(line.content)}}`;
                 lastLineWasSection = false;
             } else if (line.type === 'lyrics' && line.items) {
                 if (lastLineWasSection) { rtf += `\\par`; lastLineWasSection = false; }
