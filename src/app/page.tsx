@@ -389,33 +389,33 @@ const ChordProImporter = () => {
 
     const processedSongHtml = useMemo(() => {
         if (!processedSong) return '';
+        addLog("--- RE-GENERATING HTML (Final Formatting) ---");
         const songToFormat = processedSong;
         
-        let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${rtfEscape(songToFormat.title)}</title>
-            <link href="https://cdn.jsdelivr.net/npm/dejavu-sans-mono@1.0.0/css/dejavu-sans-mono.min.css" rel="stylesheet">
+        let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${songToFormat.title}</title>
             <style>
-                body { font-family: 'DejaVu Sans Mono', 'Courier New', monospace; font-size: 18pt; line-height: 1.2; }
+                body { font-family: Arial, sans-serif; font-size: 18pt; line-height: 1.2; }
                 .cpro { width: 100%; }
-                h1 { font-size: 24pt; text-align: center; font-weight: bold; color: black; margin-bottom: 0; font-family: Arial, sans-serif; }
-                .meta-info { font-size: 14pt; text-align: center; color: #888; margin-bottom: 36px; font-family: Arial, sans-serif; }
+                h1 { font-size: 24pt; text-align: center; font-weight: bold; color: black; margin-bottom: 0; }
+                .meta-info { font-size: 14pt; text-align: center; color: #888; margin-bottom: 36px; }
                 .line-pair { margin-bottom: 18pt; }
-                .chord-line, .lyric-line { white-space: pre; }
+                .chord-line, .lyric-line { font-family: Arial, sans-serif; font-size: 18pt; white-space: pre; }
                 .chord-line { color: #ff0000; font-weight: bold; }
                 .lyric-line { color: black; }
-                .section { font-weight: bold; color: black; font-family: Arial, sans-serif; }
-                .comment { font-style: italic; color: #666; font-family: Arial, sans-serif; }
-                .footer { font-size: 10pt; color: #888; margin-top: 36px; text-align: center; font-family: Arial, sans-serif; }
+                .section { font-weight: bold; color: black; }
+                .comment { font-style: italic; color: #666; }
+                .footer { font-size: 10pt; color: #888; margin-top: 36px; text-align: center; }
             </style></head><body><div class="cpro"><h1>${rtfEscape(songToFormat.title)}</h1>`;
         
         let metaHtml = '<div class="meta-info">';
         if (showArtist && songToFormat.artist) {
             metaHtml += `Artist: ${rtfEscape(songToFormat.artist)}<br/>`;
         }
-        // Using inline style for Key as it's simpler for this one-off within the string
-        metaHtml += `<span style="font-family: Arial, sans-serif; font-weight:bold; color:#ff0000; font-size:18pt;">Key: ${rtfEscape(songToFormat.key)}</span></div>`;
+        metaHtml += `<span class="chord-line">Key: ${rtfEscape(songToFormat.key)}</span></div>`;
         html += metaHtml;
 
         let lastLineWasSection = false;
+
         songToFormat.body.forEach((line, index) => {
             if (line.type === 'section') {
                 if (index > 0) html += `<br><br>`;
@@ -436,10 +436,12 @@ const ChordProImporter = () => {
                 line.items.forEach((item, itemIndex) => {
                     const chord = simplifyChordDisplay(item.chord);
                     const lyrics = item.lyrics || '';
+                    
                     let effectiveLength = lyrics.length;
-                    if (itemIndex > 0) { // Apply scaling for items after the first
+                    if (itemIndex > 0) {
                         effectiveLength = Math.round(effectiveLength * 1.5);
                     }
+
                     if (chord) {
                         chordLine += chord;
                         const padding = Math.max(0, effectiveLength - chord.length);
@@ -451,7 +453,9 @@ const ChordProImporter = () => {
                 });
                 
                 html += `<div class="line-pair">`;
-                if(chordLine.trim().length > 0) { html += `<div class="chord-line">${chordLine}</div>`; }
+                if(chordLine.trim().length > 0) {
+                    html += `<div class="chord-line">${chordLine}</div>`;
+                }
                 html += `<div class="lyric-line">${lyricLine}</div>`;
                 html += `</div>`;
             }
@@ -471,103 +475,43 @@ const ChordProImporter = () => {
         }
         html += `</div></body></html>`;
         return html;
-    }, [processedSong, simplifyChords, showArtist, showFooter, rtfEscape]); // Added rtfEscape to dependency array
+    }, [processedSong, simplifyChords, showArtist, showFooter]);
 
     const generateRtfContent = () => {
         if (!processedSong) return null;
+        addLog("--- GENERATING RTF (Final Formatting) ---");
+        const rtfEscape = (str: string | undefined): string => String(str || '').replace(/\\/g, '\\\\').replace(/{/g, '\\{').replace(/}/g, '\\}');
+        
         let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red128\\green128\\blue128;}\\pard\\slmult1\\f0\\fs36`;
-        rtf += `{\\pard\\qc\\b\\f0\\fs48 ${rtfEscape(processedSong.title)}\\par}`;
-        let metaRtf = `{\\pard\\qc\\f0\\fs28\\cf2 `;
+
+        rtf += `{\\pard\\qc\\b\\fs48 ${rtfEscape(processedSong.title)}\\par}`;
+        
+        let metaRtf = `{\\pard\\qc\\fs28\\cf2 `;
         if (showArtist && processedSong.artist) {
             metaRtf += `Artist: ${rtfEscape(processedSong.artist)}   `;
         }
-        metaRtf += `{\\b\\f0\\fs36\\cf1 Key: ${rtfEscape(processedSong.key)}}}`;
-        rtf += metaRtf + `\\par}`; 
-        
-        let lastLineWasSection = false;
-        processedSong.body.forEach((line, index) => {
-            if (line.type === 'section') {
-                if (index > 0) rtf += `\\par\\par`;
-                rtf += `{\\pard\\slmult1\\f0\\fs36\\b ${rtfEscape(line.content || '')}}\\par`;
-                lastLineWasSection = true;
-            } else if (line.type === 'comment') {
-                rtf += `{\\pard\\slmult1\\f0\\fs36\\i ${rtfEscape(line.content || '')}}\\par`;
-                lastLineWasSection = false;
-            } else if (line.type === 'lyrics' && line.items) {
-                if (lastLineWasSection) { rtf += `\\pard\\slmult1\\f0\\fs36\\par`; lastLineWasSection = false; }
-                if (line.items.length === 0) { rtf += `\\pard\\slmult1\\f0\\fs36\\par`; return; }
-                
-                let chordLine = '';
-                let lyricLine = '';
-                line.items.forEach((item, itemIndex) => {
-                    const chord = simplifyChordDisplay(item.chord) || '';
-                    const lyrics = item.lyrics || '';
-                    let effectiveLength = lyrics.length;
-                    if (itemIndex > 0) {
-                        effectiveLength = Math.round(effectiveLength * 1.5);
-                    }
-                    if (chord) {
-                        chordLine += chord;
-                        const padding = Math.max(0, effectiveLength - chord.length);
-                        chordLine += ' '.repeat(padding);
-                    } else {
-                        chordLine += ' '.repeat(lyrics.length);
-                    }
-                    lyricLine += lyrics;
-                });
-                
-                if (chordLine.trim().length > 0) {
-                    rtf += `\\pard\\slmult1\\f0\\fs36{\\b\\cf1 ${rtfEscape(chordLine)}}\\par`;
-                }
-                rtf += `\\pard\\slmult1\\f0\\fs36{\\cf0 ${rtfEscape(lyricLine)}}\\par`;
-            }
-        });
-        
-        rtf += `\\par\\par{\\pard\\qc\\f0\\fs20\\cf2 `;
-        const footerMeta = processedSong.meta || {};
-        if (showFooter) {
-            let footerRtfContent = '';
-            if (footerMeta.ccli) footerRtfContent += `CCLI Song #${rtfEscape(footerMeta.ccli)}\\line `;
-            if (footerMeta.copyright) footerRtfContent += `${rtfEscape(footerMeta.copyright)}\\line `;
-            if (footerMeta.footer) footerRtfContent += `${rtfEscape(footerMeta.footer)}\\line `;
-            if (processedSong.footer_comments && processedSong.footer_comments.length > 0) {
-                if(footerRtfContent.trim() && !footerRtfContent.endsWith('\\line ')) footerRtfContent += '\\line ';
-                else if (footerRtfContent.trim()) {} 
-                else {} 
-                footerRtfContent += processedSong.footer_comments.map(fc => rtfEscape(fc)).join('\\line ');
-            }
-            if (footerRtfContent.endsWith('\\line ')) {
-                footerRtfContent = footerRtfContent.substring(0, footerRtfContent.length - '\\line '.length);
-            }
-            rtf += footerRtfContent;
-        }
-        rtf += `\\par}}`;
-        return rtf;
-    };
-    
-    const generateRtfContentMono = () => {
-        if (!processedSong) return null;
-        let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Courier New;}{\\f1 Arial;}}{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red128\\green128\\blue128;}\\pard\\slmult1\\f0\\fs36`;
-        rtf += `{\\pard\\qc\\b\\f1\\fs48 ${rtfEscape(processedSong.title)}\\par}`;
-        let metaRtf = `{\\pard\\qc\\f1\\fs28\\cf2 `;
-        if (showArtist && processedSong.artist) {
-            metaRtf += `Artist: ${rtfEscape(processedSong.artist)}   `;
-        }
-        metaRtf += `{\\b\\f1\\fs36\\cf1 Key: ${rtfEscape(processedSong.key)}}}`;
+        metaRtf += `{\\b\\fs36\\cf1 Key: ${rtfEscape(processedSong.key)}}`;
+        metaRtf += `}`; 
         rtf += metaRtf + `\\par`;
         
         let lastLineWasSection = false;
+
         processedSong.body.forEach((line, index) => {
             if (line.type === 'section') {
                 if (index > 0) rtf += `\\par\\par`;
-                rtf += `{\\pard\\slmult1\\f1\\fs36\\b ${rtfEscape(line.content || '')}}\\par`;
+                rtf += `{\\pard\\slmult1\\f0\\fs36\\b ${rtfEscape(line.content || '')}\\par}`;
                 lastLineWasSection = true;
             } else if (line.type === 'comment') {
-                rtf += `{\\pard\\slmult1\\f1\\fs36\\i ${rtfEscape(line.content || '')}}\\par`;
+                rtf += `{\\pard\\slmult1\\f0\\fs36\\i ${rtfEscape(line.content || '')}\\par}`;
                 lastLineWasSection = false;
             } else if (line.type === 'lyrics' && line.items) {
-                if (lastLineWasSection) { rtf += `\\pard\\slmult1\\f0\\fs36\\par`; lastLineWasSection = false; }
-                if (line.items.length === 0) { rtf += `\\pard\\slmult1\\f0\\fs36\\par`; return; }
+                if (lastLineWasSection) {
+                    rtf += `\\par`;
+                    lastLineWasSection = false;
+                }
+                if (line.items.length === 0) {
+                    rtf += `\\par`; return;
+                }
                 
                 let chordLine = '';
                 let lyricLine = '';
@@ -588,10 +532,11 @@ const ChordProImporter = () => {
                     lyricLine += lyrics;
                 });
                 
+                rtf += `\\pard\\slmult1\\f0\\fs36`;
                 if (chordLine.trim().length > 0) {
-                    rtf += `{\\pard\\slmult1\\f0\\fs36\\b\\cf1 ${rtfEscape(chordLine)}}\\par`;
+                    rtf += `{\\b\\cf1 ${rtfEscape(chordLine)}}\\par`;
                 }
-                rtf += `{\\pard\\slmult1\\f0\\fs36\\cf0 ${rtfEscape(lyricLine)}}\\par`;
+                rtf += `{\\cf0 ${rtfEscape(lyricLine)}}\\par`;
             }
         });
         
@@ -611,7 +556,88 @@ const ChordProImporter = () => {
                 footerRtfContent = footerRtfContent.substring(0, footerRtfContent.length - '\\line '.length);
             }
             if(footerRtfContent) {
-                rtf += `\\par\\par{\\pard\\qc\\f1\\fs20\\cf2 ${footerRtfContent}\\par}`;
+                rtf += `\\par\\par{\\pard\\qc\\cf2\\fs20 ${footerRtfContent}\\par}`;
+            }
+        }
+
+        rtf += `}}`;
+        return rtf;
+    };
+    
+    const generateRtfContentMono = () => {
+        if (!processedSong) return null;
+        addLog("--- GENERATING RTF (Mono - Final Formatting) ---");
+        const rtfEscape = (str: string | undefined): string => String(str || '').replace(/\\/g, '\\\\').replace(/{/g, '\\{').replace(/}/g, '\\}');
+        
+        let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Courier New;}{\\f1 Arial;}}{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red128\\green128\\blue128;}\\pard\\slmult1\\f0\\fs36`;
+        
+        rtf += `{\\pard\\qc\\b\\f1\\fs48 ${rtfEscape(processedSong.title)}\\par}`;
+        
+        let metaRtf = `{\\pard\\qc\\f1\\fs28\\cf2 `;
+        if (showArtist && processedSong.artist) {
+            metaRtf += `Artist: ${rtfEscape(processedSong.artist)}   `;
+        }
+        metaRtf += `{\\b\\f1\\fs36\\cf1 Key: ${rtfEscape(processedSong.key)}}}`;
+        metaRtf += `}`;
+        rtf += metaRtf + `\\par`;
+        
+        let lastLineWasSection = false;
+        processedSong.body.forEach((line, index) => {
+            if (line.type === 'section') {
+                if (index > 0) rtf += `\\par\\par`;
+                rtf += `{\\pard\\slmult1\\f1\\fs36\\b ${rtfEscape(line.content || '')}\\par}`;
+                lastLineWasSection = true;
+            } else if (line.type === 'comment') {
+                rtf += `{\\pard\\slmult1\\f1\\fs36\\i ${rtfEscape(line.content || '')}\\par}`;
+                lastLineWasSection = false;
+            } else if (line.type === 'lyrics' && line.items) {
+                if (lastLineWasSection) { rtf += `\\par`; lastLineWasSection = false; }
+                if (line.items.length === 0) { rtf += `\\par`; return; }
+                
+                let chordLine = '';
+                let lyricLine = '';
+                line.items.forEach((item, itemIndex) => {
+                    const chord = simplifyChordDisplay(item.chord) || '';
+                    const lyrics = item.lyrics || '';
+                    let effectiveLength = lyrics.length;
+                    if (itemIndex > 0) {
+                        effectiveLength = Math.round(effectiveLength * 1.5);
+                    }
+                    if (chord) {
+                        chordLine += chord;
+                        const padding = Math.max(0, effectiveLength - chord.length);
+                        chordLine += ' '.repeat(padding);
+                    } else {
+                        chordLine += ' '.repeat(effectiveLength);
+                    }
+                    lyricLine += lyrics;
+                });
+                
+                rtf += `\\pard\\slmult1\\f0\\fs36`;
+                if (chordLine.trim().length > 0) {
+                    rtf += `{\\b\\cf1 ${rtfEscape(chordLine)}}\\par`;
+                }
+                rtf += `{\\cf0 ${rtfEscape(lyricLine)}}\\par`;
+            }
+        });
+        
+        const footerMeta = processedSong.meta || {};
+        if (showFooter) {
+            let footerRtfContent = '';
+            if (footerMeta.ccli) footerRtfContent += `CCLI Song #${rtfEscape(footerMeta.ccli)}\\line `;
+            if (footerMeta.copyright) footerRtfContent += `${rtfEscape(footerMeta.copyright)}\\line `;
+            if (footerMeta.footer) footerRtfContent += `${rtfEscape(footerMeta.footer)}\\line `;
+            if (processedSong.footer_comments && processedSong.footer_comments.length > 0) {
+                if(footerRtfContent.trim() && !footerRtfContent.endsWith('\\line ')) footerRtfContent += '\\line ';
+                else if (footerRtfContent.trim()) {} 
+                else {} 
+                footerRtfContent += processedSong.footer_comments.map(fc => rtfEscape(fc)).join('\\line ');
+            }
+            if (footerRtfContent.endsWith('\\line ')) {
+                footerRtfContent = footerRtfContent.substring(0, footerRtfContent.length - '\\line '.length);
+            }
+            if(footerRtfContent) {
+                rtf += `\\par\\par{\\pard\\qc\\f1\\cf2\\fs20 ${footerRtfContent}\\par}`;
             }
         }
 
@@ -743,7 +769,7 @@ const ChordProImporter = () => {
 
 // --- Main App Component ---
 export default function App() {
-  const [activeView, setActiveView] = useState('chordpro'); // Default to chordpro
+  const [activeView, setActiveView] = useState('chordpro');
   const [apiKey, setApiKey] = useState('');
 
   const NavLink = ({ view, label, icon: Icon }: { view: string, label: string, icon: React.ElementType }) => (
