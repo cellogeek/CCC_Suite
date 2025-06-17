@@ -390,7 +390,7 @@ const ChordProImporter = () => {
 
     const processedSongHtml = useMemo(() => {
         if (!processedSong) return '';
-        addLog("--- RE-GENERATING HTML (DejaVu Sans Mono Bold, Black Text) ---");
+        addLog("--- RE-GENERATING HTML (DejaVu Sans Mono Bold, Black Text, Improved Fallbacks) ---");
         const songToFormat = processedSong;
         
         let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${rtfEscape(songToFormat.title)}</title>
@@ -398,15 +398,15 @@ const ChordProImporter = () => {
             <style>
                 body { font-family: Arial, sans-serif; font-size: 18pt; line-height: 1.2; } /* Default body font */
                 .cpro { width: 100%; }
-                h1 { font-family: Arial, sans-serif; font-size: 24pt; text-align: center; font-weight: bold; color: black; margin-bottom: 0; }
-                .meta-info { font-family: Arial, sans-serif; font-size: 14pt; text-align: center; font-weight: bold; color: black; margin-bottom: 36px; } /* Meta info uses Arial, black, bold */
+                h1 { font-size: 24pt; text-align: center; font-weight: bold; color: black; margin-bottom: 0; font-family: Arial, sans-serif; }
+                .meta-info { font-size: 14pt; text-align: center; color: black; font-weight: bold; margin-bottom: 36px; font-family: Arial, sans-serif; }
                 .line-pair { margin-bottom: 18pt; }
-                .chord-line, .lyric-line { font-family: 'DejaVu Sans Mono', 'Courier New', monospace; font-size: 18pt; font-weight: bold; white-space: pre; } /* Song content uses DejaVu Sans Mono Bold */
-                .chord-line { color: #ff0000; } /* Chords are red */
-                .lyric-line { color: black; } /* Lyrics are black */
-                .section { font-family: Arial, sans-serif; font-weight: bold; color: black; }  /* Section titles use Arial, black, bold */
-                .comment { font-family: Arial, sans-serif; font-weight: bold; color: black; } /* Comments use Arial, black, bold */
-                .footer { font-family: Arial, sans-serif; font-size: 10pt; font-weight: bold; color: black; margin-top: 36px; text-align: center; } /* Footer uses Arial, black, bold */
+                .chord-line, .lyric-line { font-family: 'DejaVu Sans Mono', Menlo, Monaco, Consolas, monospace; font-size: 18pt; white-space: pre; font-weight: bold; } /* Song content uses DejaVu Sans Mono Bold */
+                .lyric-line { color: black; /* font-weight already in common rule */ }
+                .chord-line { color: #ff0000; /* font-weight already in common rule */ }
+                .section { font-weight: bold; color: black; font-family: Arial, sans-serif; }
+                .comment { color: black; font-weight: bold; font-family: Arial, sans-serif; } /* No italics, black, bold */
+                .footer { font-size: 10pt; color: black; font-weight: bold; margin-top: 36px; text-align: center; font-family: Arial, sans-serif; }
             </style></head><body><div class="cpro"><h1>${rtfEscape(songToFormat.title)}</h1>`;
         
         let metaHtml = '<div class="meta-info">';
@@ -414,7 +414,7 @@ const ChordProImporter = () => {
             metaHtml += `Artist: ${rtfEscape(songToFormat.artist)}<br/>`;
         }
         // Key: label uses meta-info style (Arial), key value uses chord-line style (DejaVu Sans Mono Bold Red)
-        metaHtml += `Key: <span class="chord-line" style="font-family: 'DejaVu Sans Mono', 'Courier New', monospace; color: #ff0000; font-weight: bold; font-size: 14pt;">${rtfEscape(songToFormat.key)}</span></div>`; 
+        metaHtml += `Key: <span style="font-family: 'DejaVu Sans Mono', Menlo, Monaco, Consolas, monospace; color: #ff0000; font-weight: bold; font-size: 14pt;">${rtfEscape(songToFormat.key)}</span></div>`; 
         html += metaHtml;
 
         let lastLineWasSection = false;
@@ -433,6 +433,7 @@ const ChordProImporter = () => {
                     lastLineWasSection = false;
                 }
                 
+                // Do not render a <br> for empty lines, effectively removing them within sections
                 if (line.items.length === 0) { return; } 
                 
                 let chordLine = '';
@@ -542,7 +543,7 @@ const ChordProImporter = () => {
                 }
                 rtf += `{\\cf0 ${rtfEscape(lyricLine)}}`;
             }
-             rtf += `\\par`;
+            rtf += `\\par`;
         });
         
         const footerMeta = songToFormat.meta || {};
@@ -624,7 +625,7 @@ const ChordProImporter = () => {
                 }
                 rtf += `{\\cf0 ${rtfEscape(lyricLine)}}`;
             }
-             rtf += `\\par`;
+            rtf += `\\par`;
         });
         
         const footerMeta = songToFormat.meta || {};
@@ -834,4 +835,3 @@ export default function App() {
     </div>
   );
 }
-
