@@ -350,7 +350,7 @@ const ChordProImporter = () => {
             if (song.key && musicalKeys.includes(song.key)) {
                 setTargetKey(song.key);
             } else {
-                setTargetKey('C'); // Default if key is not found or not in list
+                setTargetKey('C'); 
             }
         } catch (e: any) {
             addLog(`FATAL ERROR: ${e.message}`);
@@ -362,7 +362,7 @@ const ChordProImporter = () => {
         if (!parsedSong) return null;
         const originalKey = parsedSong.key || 'C';
         const notes: Record<string, number> = { 'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11 };
-        const originalRoot = originalKey.replace(/m$/, ''); // Handle minor keys for interval calculation
+        const originalRoot = originalKey.replace(/m$/, ''); 
         const targetRoot = targetKey.replace(/m$/, '');
         let interval = 0;
         if ((originalRoot in notes) && (targetRoot in notes)) {
@@ -384,8 +384,8 @@ const ChordProImporter = () => {
         if (!rootMatch) return chord;
         const root = rootMatch[0];
         const restOfChord = chord.substring(root.length);
-        if (restOfChord.startsWith('m')) return root + 'm'; // Simplifies Cm7, Cmin7 etc. to Cm
-        return root; // Simplifies C7, Cmaj7, Csus etc. to C
+        if (restOfChord.startsWith('m')) return root + 'm'; 
+        return root; 
     };
 
     const processedSongHtml = useMemo(() => {
@@ -396,24 +396,25 @@ const ChordProImporter = () => {
         let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${rtfEscape(songToFormat.title)}</title>
             <link href="https://cdn.jsdelivr.net/npm/dejavu-sans-mono@1.0.0/css/dejavu-sans-mono.min.css" rel="stylesheet">
             <style>
-                body { font-family: 'DejaVu Sans Mono', 'Courier New', monospace; font-weight: bold; font-size: 18pt; line-height: 1.2; }
+                body { font-family: Arial, sans-serif; font-size: 18pt; line-height: 1.2; } /* Default body font */
                 .cpro { width: 100%; }
                 h1 { font-family: Arial, sans-serif; font-size: 24pt; text-align: center; font-weight: bold; color: black; margin-bottom: 0; }
-                .meta-info { font-family: Arial, sans-serif; font-size: 14pt; text-align: center; color: black; font-weight: bold; margin-bottom: 36px; }
+                .meta-info { font-family: Arial, sans-serif; font-size: 14pt; text-align: center; font-weight: bold; color: black; margin-bottom: 36px; } /* Meta info uses Arial, black, bold */
                 .line-pair { margin-bottom: 18pt; }
-                .chord-line, .lyric-line { white-space: pre; /* Inherits font-family and font-weight from body */ }
-                .chord-line { color: #ff0000; /* Inherits font-weight from body */ }
-                .lyric-line { color: black; /* Inherits font-weight from body */ }
-                .section { font-family: Arial, sans-serif; font-weight: bold; color: black; } 
-                .comment { font-family: Arial, sans-serif; color: black; font-weight: bold; }
-                .footer { font-family: Arial, sans-serif; font-size: 10pt; color: black; font-weight: bold; margin-top: 36px; text-align: center; }
+                .chord-line, .lyric-line { font-family: 'DejaVu Sans Mono', 'Courier New', monospace; font-size: 18pt; font-weight: bold; white-space: pre; } /* Song content uses DejaVu Sans Mono Bold */
+                .chord-line { color: #ff0000; } /* Chords are red */
+                .lyric-line { color: black; } /* Lyrics are black */
+                .section { font-family: Arial, sans-serif; font-weight: bold; color: black; }  /* Section titles use Arial, black, bold */
+                .comment { font-family: Arial, sans-serif; font-weight: bold; color: black; } /* Comments use Arial, black, bold */
+                .footer { font-family: Arial, sans-serif; font-size: 10pt; font-weight: bold; color: black; margin-top: 36px; text-align: center; } /* Footer uses Arial, black, bold */
             </style></head><body><div class="cpro"><h1>${rtfEscape(songToFormat.title)}</h1>`;
         
         let metaHtml = '<div class="meta-info">';
         if (showArtist && songToFormat.artist) {
             metaHtml += `Artist: ${rtfEscape(songToFormat.artist)}<br/>`;
         }
-        metaHtml += `Key: <span class="chord-line">${rtfEscape(songToFormat.key)}</span></div>`; 
+        // Key: label uses meta-info style (Arial), key value uses chord-line style (DejaVu Sans Mono Bold Red)
+        metaHtml += `Key: <span class="chord-line" style="font-family: 'DejaVu Sans Mono', 'Courier New', monospace; color: #ff0000; font-weight: bold; font-size: 14pt;">${rtfEscape(songToFormat.key)}</span></div>`; 
         html += metaHtml;
 
         let lastLineWasSection = false;
@@ -431,7 +432,7 @@ const ChordProImporter = () => {
                     html += `<div style="height: 18pt;"></div>`; 
                     lastLineWasSection = false;
                 }
-                // Do not render a <br> for empty lyric lines to remove blank lines within sections
+                
                 if (line.items.length === 0) { return; } 
                 
                 let chordLine = '';
@@ -499,13 +500,13 @@ const ChordProImporter = () => {
         
         let lastLineWasSection = false;
 
-        songToFormat.body.forEach((line, index) => {
+        processedSong.body.forEach((line, index) => {
             if (line.type === 'section') {
                 if (index > 0) rtf += `\\par\\par`;
-                rtf += `{\\pard\\b ${rtfEscape(line.content || '')}\\par}`;
+                rtf += `{\\b ${rtfEscape(line.content || '')}}`;
                 lastLineWasSection = true;
             } else if (line.type === 'comment') {
-                rtf += `{\\pard\\i ${rtfEscape(line.content || '')}\\par}`;
+                rtf += `{\\i ${rtfEscape(line.content || '')}}`;
                 lastLineWasSection = false;
             } else if (line.type === 'lyrics' && line.items) {
                 if (lastLineWasSection) {
@@ -513,7 +514,7 @@ const ChordProImporter = () => {
                     lastLineWasSection = false;
                 }
                 if (line.items.length === 0) {
-                    rtf += `\\par`; return;
+                     rtf += `\\par`; return;
                 }
                 
                 let chordLine = '';
@@ -535,12 +536,13 @@ const ChordProImporter = () => {
                     lyricLine += lyrics;
                 });
                 
-                rtf += `{\\pard\\slmult1\\f0\\fs36`;
+                rtf += `\\pard\\slmult1\\f0\\fs36`;
                 if (chordLine.trim().length > 0) {
                     rtf += `{\\b\\cf1 ${rtfEscape(chordLine)}}\\par`;
                 }
-                rtf += `{\\cf0 ${rtfEscape(lyricLine)}}\\par}`;
+                rtf += `{\\cf0 ${rtfEscape(lyricLine)}}`;
             }
+             rtf += `\\par`;
         });
         
         const footerMeta = songToFormat.meta || {};
@@ -585,13 +587,13 @@ const ChordProImporter = () => {
         rtf += metaRtf + `\\par`;
         
         let lastLineWasSection = false;
-        songToFormat.body.forEach((line, index) => {
+        processedSong.body.forEach((line, index) => {
             if (line.type === 'section') {
                 if (index > 0) rtf += `\\par\\par`;
-                rtf += `{\\pard\\b\\f1 ${rtfEscape(line.content || '')}\\par}`;
+                rtf += `{\\b\\f1 ${rtfEscape(line.content || '')}}`;
                 lastLineWasSection = true;
             } else if (line.type === 'comment') {
-                rtf += `{\\pard\\i\\f1 ${rtfEscape(line.content || '')}\\par}`;
+                rtf += `{\\i\\f1 ${rtfEscape(line.content || '')}}`;
                 lastLineWasSection = false;
             } else if (line.type === 'lyrics' && line.items) {
                 if (lastLineWasSection) { rtf += `\\par`; lastLineWasSection = false; }
@@ -620,8 +622,9 @@ const ChordProImporter = () => {
                 if (chordLine.trim().length > 0) {
                     rtf += `{\\b\\cf1 ${rtfEscape(chordLine)}}\\par`;
                 }
-                rtf += `{\\cf0 ${rtfEscape(lyricLine)}}\\par}`;
+                rtf += `{\\cf0 ${rtfEscape(lyricLine)}}`;
             }
+             rtf += `\\par`;
         });
         
         const footerMeta = songToFormat.meta || {};
@@ -692,7 +695,7 @@ const ChordProImporter = () => {
 
     const handleDownloadLog = () => {
         addLog("Downloading debug log.");
-        const logContent = log.slice().reverse().join('\n\n'); // Newest entries at the bottom
+        const logContent = log.slice().reverse().join('\n\n'); 
         createAndDownloadBlob(logContent, 'text/plain', 'txt');
     };
 
@@ -749,7 +752,7 @@ const ChordProImporter = () => {
                 </div>
                 <GlassCard className="lg:h-full flex flex-col">
                      <h3 className="text-xl font-semibold text-white mb-4 flex items-center gap-2"><Eye size={22}/>3. Live Preview</h3>
-                     <div className="h-[calc(100vh-12rem)] min-h-[300px] bg-black/20 rounded-lg p-2 flex-grow"> {/* Adjusted height for better fit */}
+                     <div className="h-[calc(100vh-12rem)] min-h-[300px] bg-black/20 rounded-lg p-2 flex-grow"> 
                         <SongPreview htmlContent={processedSongHtml} />
                      </div>
                 </GlassCard>
@@ -803,7 +806,6 @@ export default function App() {
          .font-mono { font-family: 'Fira Mono', monospace; }
          .animate-fade-in { animation: fadeIn 0.5s ease-in-out; }
          @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-         /* Custom scrollbar for webkit browsers */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); border-radius: 10px; }
         ::-webkit-scrollbar-thumb { background: rgba(255,165,0,0.6); border-radius: 10px; }
@@ -825,7 +827,7 @@ export default function App() {
              </div>
            </nav>
          </aside>
-         <main className="flex-1 p-4 sm:p-6 md:p-10 overflow-y-auto"> {/* Adjusted padding */}
+         <main className="flex-1 p-4 sm:p-6 md:p-10 overflow-y-auto"> 
            {renderActiveView()}
          </main>
        </div>
