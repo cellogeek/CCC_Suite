@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BookOpenText, Music, FileText, Download, ChevronsRight, Settings, UploadCloud, KeyRound, Eye, FileUp, Loader2, AlertCircle, PlayCircle, TestTube2, Workflow, TerminalSquare, Globe, ListChecks, EyeOff, Save, Trash2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
-import { getApiKey, saveApiKey } from '@/lib/actions'; // Import actions for API key
+import { getApiKey, saveApiKey, fetchVerse as fetchVerseAction } from '@/lib/actions'; 
 
 // --- Helper & Utility Functions ---
 const GlassCard = ({ children, className = '' }: { children: React.ReactNode, className?: string }) => (
@@ -41,12 +41,11 @@ const rtfEscape = (str: string | undefined): string => {
       result += '\\}';
     } else if (char === '\\') {
       result += '\\\\';
-    } else if (charCode < 128) { // Standard ASCII characters
+    } else if (char === '\n') {
+      result += '\\par '; 
+    } else if (charCode < 128) { 
       result += char;
     } else {
-      // For non-ASCII, use RTF Unicode escape sequence \uXXXX?
-      // XXXX is the decimal Unicode code point.
-      // The '?' is a substitution character for non-Unicode RTF readers.
       result += `\\u${charCode}?`;
     }
   }
@@ -201,7 +200,7 @@ const AppSettings = ({ appApiKey, setAppApiKey }: { appApiKey: string, setAppApi
             setAppApiKey(dbKey);
             setInputFieldValue(dbKey);
           } else if (!dbKey && appApiKey) {
-            setInputFieldValue(appApiKey);
+            setInputFieldValue(appApiKey); 
           }
         })
         .catch(err => {
@@ -340,28 +339,45 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
     setParsedVerses([]);
     setIsFormatted(false);
     
-    const query = verseInput.split(';').map(v => v.trim()).filter(Boolean).join(',');
-    const url = `https://api.esv.org/v3/passage/text/?q=${encodeURIComponent(query)}&include-headings=false&include-footnotes=false&include-verse-numbers=false`;
+    const queries = verseInput.split(';').map(v => v.trim()).filter(Boolean);
     
     try {
-        const response = await fetch(url, {
-            headers: { 'Authorization': `Token ${apiKey}` }
-        });
-        if (!response.ok) {
-            const data = await response.json();
-            throw new Error(`API request failed: ${data.detail || response.statusText}`);
-        }
-        const data = await response.json();
-        if (data.passages && data.passages.length > 0) {
-             setParsedVerses([{id: Date.now(), reference: data.query, text: data.passages.join('\n').trim()}]);
-             toast({ title: "Success!", description: "Verses fetched successfully."});
+      const results = await Promise.all(queries.map(q => fetchVerseAction(q, apiKey)));
+      const fetched: FetchedVerse[] = [];
+      let anyError = false;
+
+      results.forEach(actionResponse => {
+        if (actionResponse.success && actionResponse.data) {
+          let passageText = actionResponse.data;
+          const passageQuery = actionResponse.query || '';
+          
+          if (passageQuery && passageText.startsWith(passageQuery)) {
+            passageText = passageText.substring(passageQuery.length).trim();
+          }
+          // (ESV) should be removed by server action's include-short-copyright=false
+          // If it persists, add: passageText = passageText.replace(/\(ESV\)\s*$/, "").trim();
+
+          fetched.push({id: Date.now() + Math.random(), reference: passageQuery, text: passageText});
         } else {
-            setError('Verse not found or invalid query. Try a full reference (e.g., John 3:16).');
-            toast({ title: "Error", description: 'Verse not found or invalid query.', variant: "destructive"});
+          anyError = true;
+          const errorMessage = actionResponse.error || `Failed to fetch ${actionResponse.query || 'verse'}.`;
+          setError(prev => prev ? `${prev}\n${errorMessage}` : errorMessage);
+          toast({ title: "Fetch Error", description: errorMessage, variant: "destructive"});
         }
+      });
+
+      if (fetched.length > 0) {
+        setParsedVerses(fetched);
+        toast({ title: "Success!", description: `${fetched.length} passage(s) fetched successfully.`});
+      }
+      if (anyError && fetched.length === 0) {
+         setError(prev => prev || 'No verses could be fetched. Please check your input and API key.');
+      }
+
+
     } catch (err: any) {
-        setError(err.message);
-        toast({ title: "Fetch Error", description: err.message, variant: "destructive"});
+        setError(err.message || "An unexpected error occurred during fetch.");
+        toast({ title: "Fetch Error", description: err.message || "An unexpected error occurred.", variant: "destructive"});
     } finally {
         setIsLoading(false);
     }
@@ -381,18 +397,43 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
         toast({title: "Not Ready", description: "Please fetch and format verses before downloading.", variant: "default"});
         return;
     }
-    let rtf = `{\\rtf1\\ansi\\deff0 {\\fonttbl{\\f0 Arial;}} \\fs24`;
-    parsedVerses.forEach(verse => {
+    let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}\\fs24`; // Default font size 24pt
+    
+    parsedVerses.forEach((verse, verseIndex) => {
+        if (verseIndex > 0) {
+             rtf += `{\\pard\\par}`; // Add a blank page break for new passages after the first. (ProPresenter trick: new slide)
+        }
         rtf += `{\\pard\\b ${rtfEscape(verse.reference)}\\b0\\par}`;
-        rtf += `{\\pard ${rtfEscape(verse.text.replace(/\n/g, '\\par '))}\\par}`;
-        rtf += `{\\pard\\par}`;
+
+        const scriptureText = verse.text;
+        const verseRegex = /\[(\d+)\]\s*([\s\S]*?)(?=\s*\[\d+\]|$)/g;
+        
+        let match;
+        const verseMatches = [];
+        while ((match = verseRegex.exec(scriptureText)) !== null) {
+            verseMatches.push(match);
+        }
+
+        if (verseMatches.length > 0) {
+            verseMatches.forEach((matchResult) => {
+                const verseNum = matchResult[1];
+                const verseBody = matchResult[2].trim();
+                rtf += `{\\pard\\par}`; 
+                rtf += `{\\pard{\\super ${verseNum}}\\nosupersub ${rtfEscape(verseBody)}\\par}`;
+            });
+        } else { // If no verse markers are found, print the whole text as one block
+            rtf += `{\\pard\\par}`;
+            rtf += `{\\pard ${rtfEscape(scriptureText)}\\par}`;
+        }
     });
+
     rtf += `}`;
     const blob = new Blob([rtf], { type: 'application/rtf' });
     const url = URL.createObjectURL(blob);
+    const safeReference = parsedVerses.map(v => v.reference).join('_').replace(/[^a-z0-9]/gi, '_') || "slides";
     const a = document.createElement('a');
     a.href = url;
-    a.download = `slide-notes-${new Date().toISOString().split('T')[0]}.rtf`;
+    a.download = `${safeReference}-${new Date().toISOString().split('T')[0]}.rtf`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -413,27 +454,27 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
                 className="w-full h-24 p-3 bg-white/10 rounded-lg text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-orange-400"
                 placeholder="e.g., John 3:16; Romans 8:1; Psalm 23:1-6" />
             <ActionButton onClick={handleFetchVerses} icon={ChevronsRight} className="w-full sm:w-auto" disabled={isLoading || !verseInput}>
-                {isLoading ? 'Fetching...' : 'Fetch Verses'}
+                {isLoading ? (<><Loader2 className="animate-spin mr-2" size={18}/> Fetching...</>) : 'Fetch Verses'}
             </ActionButton>
             {error && <p className="text-red-400 bg-red-900/50 p-3 rounded-md text-sm flex items-center gap-2"><AlertCircle size={18} /> {error}</p>}
         </div>
       </GlassCard>
       
-      <GlassCard>
+      <GlassCard className={parsedVerses.length === 0 ? 'opacity-50 pointer-events-none' : ''}>
         <h3 className="text-xl font-semibold text-white mb-4">2. Process & Download</h3>
         <div className="flex flex-col sm:flex-row gap-4">
             <ActionButton 
                 onClick={handleFormatSlideData} 
                 icon={TestTube2} 
                 disabled={isLoading || parsedVerses.length === 0}
-                className="flex-1"
+                className={`flex-1 ${isFormatted ? 'bg-green-500 hover:bg-green-600' : ''}`}
             >
-                Format Slide Data
+                {isFormatted ? "Data Formatted!" : "Format Slide Data"}
             </ActionButton>
             <ActionButton 
                 onClick={handleGenerateRtf} 
                 icon={Download} 
-                disabled={!isFormatted || parsedVerses.length === 0}
+                disabled={!isFormatted || parsedVerses.length === 0 || isLoading}
                 className="flex-1"
             >
                 Download RTF
@@ -574,7 +615,7 @@ const ChordProImporter = () => {
                 .line-pair { margin-bottom: 18pt; }
                 .chord-line, .lyric-line { font-family: 'DejaVu Sans Mono', Menlo, Monaco, Consolas, monospace; font-size: 18pt; white-space: pre; font-weight: bold; } 
                 .lyric-line { color: black; font-weight: bold; }
-                .chord-line { color: #ff0000; }
+                .chord-line { color: #ff0000; } /* Red color for chords */
                 .section { font-weight: bold; color: black; font-family: Arial, sans-serif; }
                 .comment { color: black; font-weight: bold; font-family: Arial, sans-serif; } 
                 .footer { font-size: 10pt; color: black; font-weight: bold; margin-top: 36px; text-align: center; font-family: Arial, sans-serif; }
@@ -587,16 +628,18 @@ const ChordProImporter = () => {
         metaHtml += `<span style="font-family: Arial, sans-serif;">Key: </span><span class="chord-line">${rtfEscape(songToFormat.key)}</span></div>`; 
         html += metaHtml;
 
+        let firstSectionProcessed = false;
         songToFormat.body.forEach((line, index) => {
-            if (index > 0 && line.type === 'section') {
-                 html += `<br><br>`; 
-            }
             if (line.type === 'section') {
+                if(firstSectionProcessed){ // Add space before sections, but not the very first one after meta.
+                    html += `<br><br>`; 
+                }
                 html += `<div class="section">${rtfEscape(line.content)}</div>`;
+                firstSectionProcessed = true;
             } else if (line.type === 'comment') {
                 html += `<div class="comment">${rtfEscape(line.content)}</div>`;
             } else if (line.type === 'lyrics' && line.items) {
-                if (line.items.length === 0) {  return; } 
+                if (line.items.length === 0) {  return; } // Skip rendering for fully empty lyric lines
                 
                 let chordLine = '';
                 let lyricLine = '';
@@ -649,7 +692,7 @@ const ChordProImporter = () => {
         addLog("--- GENERATING RTF (Arial, Corrected Braces & Spacing) ---");
         const songToFormat = processedSong;
         
-        let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red128\\green128\\blue128;}\\pard\\slmult1\\f0\\fs36`;
+        let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red0\\green0\\blue0;}\\pard\\slmult1\\f0\\fs36`;
 
         rtf += `{\\pard\\qc\\b\\fs48 ${rtfEscape(songToFormat.title)}\\par}`;
         
@@ -660,17 +703,17 @@ const ChordProImporter = () => {
         metaRtf += `{\\b\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}}`; 
         rtf += metaRtf + `\\par`;
         
+        let firstSectionProcessed = false;
         songToFormat.body.forEach((line, index) => {
             rtf += `\\pard `; 
-            if (index > 0 && line.type === 'section') {
-                 rtf += `\\par\\par`; 
-            }
             if (line.type === 'section') {
-                rtf += `{\\b ${rtfEscape(line.content)}}`;
+                 if(firstSectionProcessed){ rtf += `\\par\\par`; }
+                 rtf += `{\\b ${rtfEscape(line.content)}}`;
+                 firstSectionProcessed = true;
             } else if (line.type === 'comment') {
-                rtf += `{\\i ${rtfEscape(line.content)}}`;
+                rtf += `{\\cf3 ${rtfEscape(line.content)}}`; // Using cf3 for black comments
             } else if (line.type === 'lyrics' && line.items) {
-                if (line.items.length === 0) { /* no explicit \par needed */ }
+                if (line.items.length === 0) {  }
                 else {
                     let chordLine = '';
                     let lyricLine = '';
@@ -727,7 +770,7 @@ const ChordProImporter = () => {
         addLog("--- GENERATING RTF (Mono, Corrected Braces & Spacing) ---");
         const songToFormat = processedSong;
         
-        let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Courier New;}{\\f1 Arial;}}{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red128\\green128\\blue128;}\\pard\\slmult1\\f0\\fs36`;
+        let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Courier New;}{\\f1 Arial;}}{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red0\\green0\\blue0;}\\pard\\slmult1\\f0\\fs36`;
         
         rtf += `{\\pard\\qc\\b\\f1\\fs48 ${rtfEscape(songToFormat.title)}\\par}`;
         
@@ -738,17 +781,17 @@ const ChordProImporter = () => {
         metaRtf += `{\\b\\f1\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}}`; 
         rtf += metaRtf + `\\par`;
         
+        let firstSectionProcessed = false;
         songToFormat.body.forEach((line, index) => {
             rtf += `\\pard `;
-            if (index > 0 && line.type === 'section') {
-                 rtf += `\\par\\par`;
-            }
             if (line.type === 'section') {
-                rtf += `{\\b\\f1 ${rtfEscape(line.content)}}`;
+                 if(firstSectionProcessed) { rtf += `\\par\\par`; }
+                 rtf += `{\\b\\f1 ${rtfEscape(line.content)}}`;
+                 firstSectionProcessed = true;
             } else if (line.type === 'comment') {
-                rtf += `{\\i\\f1 ${rtfEscape(line.content)}}`;
+                 rtf += `{\\cf3 ${rtfEscape(line.content)}}`; // Using cf3 for black comments
             } else if (line.type === 'lyrics' && line.items) {
-                 if (line.items.length === 0) { /* no explicit \par needed */ }
+                 if (line.items.length === 0) {  }
                  else {
                     let chordLine = '';
                     let lyricLine = '';
