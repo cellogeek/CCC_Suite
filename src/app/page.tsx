@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { BookOpen, Music, FileText, Download, ChevronsRight, Settings, UploadCloud, KeyRound, Eye, FileUp, Loader2, AlertCircle, PlayCircle, TestTube2, Workflow, TerminalSquare, Globe, FolderOpen, Save } from 'lucide-react';
+import { BookOpen, Music, FileText, Download, ChevronsRight, Settings, UploadCloud, KeyRound, Eye, FileUp, Loader2, AlertCircle, PlayCircle, TestTube2, Workflow, TerminalSquare, Globe, Save, FolderOpen, ListChecks } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast"; // Keep for potential future use if ActionButton wants to show toasts
 
 
@@ -23,6 +23,8 @@ const ActionButton = ({ children, onClick, icon: Icon, className = '', disabled 
     {children}
   </button>
 );
+
+const rtfEscape = (str: string | undefined): string => String(str || '').replace(/\\/g, '\\\\').replace(/{/g, '\\{').replace(/}/g, '\\}');
 
 // --- CUSTOM PARSING ENGINE V9 with Smart Footer Detection ---
 interface SongLineItem {
@@ -178,23 +180,25 @@ interface FetchedVerse {
     text: string;
 }
 
-const SermonBuilder = ({ apiKey }: { apiKey: string }) => {
+const SlideCreator = ({ apiKey }: { apiKey: string }) => {
   const [verseInput, setVerseInput] = useState('');
   const [parsedVerses, setParsedVerses] = useState<FetchedVerse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isFormatted, setIsFormatted] = useState(false);
+  const { toast } = useToast();
 
-  const rtfEscapeSermon = (str: string | undefined): string => String(str || '').replace(/\\/g, '\\\\').replace(/{/g, '\\{').replace(/}/g, '\\}');
-
-  const handleParse = async () => {
+  const handleFetchVerses = async () => {
     if (!verseInput) return;
     if (!apiKey) {
       setError("Please enter your ESV API Key in the Settings page first.");
+      toast({ title: "API Key Missing", description: "Please set your ESV API Key in Settings.", variant: "destructive" });
       return;
     }
     setIsLoading(true);
     setError('');
     setParsedVerses([]);
+    setIsFormatted(false);
     
     const query = verseInput.split(';').map(v => v.trim()).filter(Boolean).join(',');
     const url = `https://api.esv.org/v3/passage/text/?q=${encodeURIComponent(query)}&include-headings=false&include-footnotes=false&include-verse-numbers=false`;
@@ -210,21 +214,39 @@ const SermonBuilder = ({ apiKey }: { apiKey: string }) => {
         const data = await response.json();
         if (data.passages && data.passages.length > 0) {
              setParsedVerses([{id: Date.now(), reference: data.query, text: data.passages.join('\n').trim()}]);
+             toast({ title: "Success!", description: "Verses fetched successfully."});
         } else {
             setError('Verse not found or invalid query. Try a full reference (e.g., John 3:16).');
+            toast({ title: "Error", description: 'Verse not found or invalid query.', variant: "destructive"});
         }
     } catch (err: any) {
         setError(err.message);
+        toast({ title: "Fetch Error", description: err.message, variant: "destructive"});
     } finally {
         setIsLoading(false);
     }
   };
+
+  const handleFormatSlideData = () => {
+    if (parsedVerses.length === 0) {
+        toast({title: "No Verses", description: "Fetch some verses first to format.", variant: "default"});
+        return;
+    }
+    // For now, formatting is a conceptual step.
+    // In the future, this could transform parsedVerses into a different structure.
+    setIsFormatted(true);
+    toast({title: "Formatted", description: "Slide data is ready for RTF download."});
+  };
   
   const handleGenerateRtf = () => {
+    if (!isFormatted || parsedVerses.length === 0) {
+        toast({title: "Not Ready", description: "Please fetch and format verses before downloading.", variant: "default"});
+        return;
+    }
     let rtf = `{\\rtf1\\ansi\\deff0 {\\fonttbl{\\f0 Arial;}} \\fs24`;
     parsedVerses.forEach(verse => {
-        rtf += `{\\pard\\b ${rtfEscapeSermon(verse.reference)}\\b0\\par}`;
-        rtf += `{\\pard ${rtfEscapeSermon(verse.text.replace(/\n/g, '\\par '))}\\par}`;
+        rtf += `{\\pard\\b ${rtfEscape(verse.reference)}\\b0\\par}`;
+        rtf += `{\\pard ${rtfEscape(verse.text.replace(/\n/g, '\\par '))}\\par}`;
         rtf += `{\\pard\\par}`;
     });
     rtf += `}`;
@@ -232,17 +254,18 @@ const SermonBuilder = ({ apiKey }: { apiKey: string }) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `sermon-notes-${new Date().toISOString().split('T')[0]}.rtf`;
+    a.download = `slide-notes-${new Date().toISOString().split('T')[0]}.rtf`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    toast({title: "RTF Downloaded", description: "Slide notes RTF file generated."});
   };
 
   return (
     <div className="space-y-6 animate-fade-in">
         <h2 className="text-3xl font-bold text-white flex items-center gap-3">
-            <BookOpen size={32} className="text-orange-400" /> Sermon Builder
+            <ListChecks size={32} className="text-orange-400" /> Slide Creator
         </h2>
       <GlassCard>
         <h3 className="text-xl font-semibold text-white mb-4">1. Input Verses</h3>
@@ -251,26 +274,32 @@ const SermonBuilder = ({ apiKey }: { apiKey: string }) => {
             <textarea value={verseInput} onChange={(e) => setVerseInput(e.target.value)}
                 className="w-full h-24 p-3 bg-white/10 rounded-lg text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-orange-400"
                 placeholder="e.g., John 3:16; Romans 8:1; Psalm 23:1-6" />
-            <ActionButton onClick={handleParse} icon={ChevronsRight} className="w-full sm:w-auto" disabled={isLoading || !verseInput}>
-                {isLoading ? 'Fetching...' : 'Parse & Fetch Verses'}
+            <ActionButton onClick={handleFetchVerses} icon={ChevronsRight} className="w-full sm:w-auto" disabled={isLoading || !verseInput}>
+                {isLoading ? 'Fetching...' : 'Fetch Verses'}
             </ActionButton>
+            {error && <p className="text-red-400 bg-red-900/50 p-3 rounded-md text-sm flex items-center gap-2"><AlertCircle size={18} /> {error}</p>}
         </div>
       </GlassCard>
+      
       <GlassCard>
-        <h3 className="text-xl font-semibold text-white mb-4">2. ProPresenter Output</h3>
-        <div className="space-y-4 max-h-96 overflow-y-auto pr-2 mb-6">
-             {!verseInput && parsedVerses.length === 0 && !isLoading && <div className="text-blue-200 text-center p-8">Your formatted sermon slides will appear here.</div>}
-            {isLoading && <div className="text-white text-center p-8"><Loader2 className="inline-block animate-spin mr-2" />Loading...</div>}
-            {error && <div className="text-red-400 bg-red-900/50 p-4 rounded-lg">{error}</div>}
-            {!isLoading && !error && parsedVerses.length > 0 && parsedVerses.map(verse => (
-                <div key={verse.id} className="bg-blue-900/30 p-4 rounded-lg">
-                    <p className="font-bold text-orange-400">{verse.reference}</p>
-                    <p className="text-white mt-1 whitespace-pre-wrap">{verse.text}</p>
-                </div>
-            ))}
-        </div>
-        <div className="border-t border-white/20 pt-6 flex justify-end">
-             <ActionButton onClick={handleGenerateRtf} icon={Download} disabled={parsedVerses.length === 0 || isLoading}>Generate ProPresenter RTF</ActionButton>
+        <h3 className="text-xl font-semibold text-white mb-4">2. Process & Download</h3>
+        <div className="flex flex-col sm:flex-row gap-4">
+            <ActionButton 
+                onClick={handleFormatSlideData} 
+                icon={TestTube2} 
+                disabled={isLoading || parsedVerses.length === 0}
+                className="flex-1"
+            >
+                Format Slide Data
+            </ActionButton>
+            <ActionButton 
+                onClick={handleGenerateRtf} 
+                icon={Download} 
+                disabled={!isFormatted || parsedVerses.length === 0}
+                className="flex-1"
+            >
+                Download RTF
+            </ActionButton>
         </div>
       </GlassCard>
     </div>
@@ -320,8 +349,6 @@ const ChordProImporter = () => {
     const [log, setLog] = useState<string[]>([]);
     const debouncedChordProInput = useDebounce(chordProInput, 500);
     
-    const rtfEscape = (str: string | undefined): string => String(str || '').replace(/\\/g, '\\\\').replace(/{/g, '\\{').replace(/}/g, '\\}');
-
     const addLog = (message: string, data?: any) => {
         const timestamp = new Date().toLocaleTimeString();
         let logMessage = `[${timestamp}] ${message}`;
@@ -350,6 +377,7 @@ const ChordProImporter = () => {
             if (song.key && musicalKeys.includes(song.key)) {
                 setTargetKey(song.key);
             } else {
+                 addLog(`Parsed key "${song.key}" not in standard keys. Defaulting target to C.`);
                 setTargetKey('C'); 
             }
         } catch (e: any) {
@@ -362,19 +390,24 @@ const ChordProImporter = () => {
         if (!parsedSong) return null;
         const originalKey = parsedSong.key || 'C';
         const notes: Record<string, number> = { 'C': 0, 'C#': 1, 'Db': 1, 'D': 2, 'D#': 3, 'Eb': 3, 'E': 4, 'F': 5, 'F#': 6, 'Gb': 6, 'G': 7, 'G#': 8, 'Ab': 8, 'A': 9, 'A#': 10, 'Bb': 10, 'B': 11 };
+        
         const originalRoot = originalKey.replace(/m$/, ''); 
         const targetRoot = targetKey.replace(/m$/, '');
+        
         let interval = 0;
         if ((originalRoot in notes) && (targetRoot in notes)) {
              interval = notes[targetRoot] - notes[originalRoot];
+        } else {
+            addLog(`Could not determine interval: Original key root "${originalRoot}" or Target key root "${targetRoot}" not found in notes map. Transposition may be incorrect.`);
         }
+        
         return {
             ...parsedSong,
             key: targetKey,
             body: parsedSong.body.map(line => {
                 if (line.type !== 'lyrics' || !line.items) return line;
                 return { ...line, items: line.items.map(item => ({ ...item, chord: CustomTransposer.transpose(item.chord, interval), })) };
-            }).filter(Boolean)
+            }).filter(Boolean) // filter(Boolean) might not be necessary if all lines are returned
         };
     }, [parsedSong, targetKey]);
 
@@ -396,7 +429,7 @@ const ChordProImporter = () => {
         let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${rtfEscape(songToFormat.title)}</title>
             <link href="https://cdn.jsdelivr.net/npm/dejavu-sans-mono@1.0.0/css/dejavu-sans-mono.min.css" rel="stylesheet">
             <style>
-                body { font-family: 'DejaVu Sans Mono', Menlo, Monaco, Consolas, monospace; font-size: 18pt; line-height: 1.2; }
+                body { font-family: 'DejaVu Sans Mono', Menlo, Monaco, Consolas, monospace; font-size: 18pt; line-height: 1.2; font-weight: bold; }
                 .cpro { width: 100%; }
                 h1 { font-size: 24pt; text-align: center; font-weight: bold; color: black; margin-bottom: 0; font-family: Arial, sans-serif; }
                 .meta-info { font-size: 14pt; text-align: center; color: black; font-weight: bold; margin-bottom: 36px; font-family: Arial, sans-serif; }
@@ -433,6 +466,7 @@ const ChordProImporter = () => {
                     
                     let effectiveLength = lyrics.length;
                     if (itemIndex > 0) {
+                        // Slightly increased multiplier for potentially better visual spacing with DejaVu Sans Mono Bold
                         effectiveLength = Math.round(effectiveLength * 1.5); 
                     }
 
@@ -471,7 +505,7 @@ const ChordProImporter = () => {
         return html;
     }, [processedSong, simplifyChords, showArtist, showFooter]);
 
-    const generateRtfContent = () => {
+    const generateRtfContent = (): string | null => {
         if (!processedSong) return null;
         addLog("--- GENERATING RTF (Arial, Corrected Braces & Spacing) ---");
         const songToFormat = processedSong;
@@ -484,8 +518,7 @@ const ChordProImporter = () => {
         if (showArtist && songToFormat.artist) {
             metaRtf += `Artist: ${rtfEscape(songToFormat.artist)}   `;
         }
-        metaRtf += `{\\b\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}`;
-        metaRtf += `}`; 
+        metaRtf += `{\\b\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}}`; 
         rtf += metaRtf + `\\par`;
         
         songToFormat.body.forEach((line, index) => {
@@ -548,7 +581,7 @@ const ChordProImporter = () => {
         return rtf;
     };
     
-    const generateRtfContentMono = () => {
+    const generateRtfContentMono = (): string | null => {
         if (!processedSong) return null;
         addLog("--- GENERATING RTF (Mono, Corrected Braces & Spacing) ---");
         const songToFormat = processedSong;
@@ -562,7 +595,6 @@ const ChordProImporter = () => {
             metaRtf += `Artist: ${rtfEscape(songToFormat.artist)}   `;
         }
         metaRtf += `{\\b\\f1\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}}`; 
-        metaRtf += `}`;
         rtf += metaRtf + `\\par`;
         
         songToFormat.body.forEach((line, index) => {
@@ -752,6 +784,7 @@ const ChordProImporter = () => {
 export default function App() {
   const [activeView, setActiveView] = useState('chordpro');
   const [apiKey, setApiKey] = useState('');
+  const { toast } = useToast(); // Make toast available in the App scope if needed
 
   const NavLink = ({ view, label, icon: Icon }: { view: string, label: string, icon: React.ElementType }) => (
     <button onClick={() => setActiveView(view)}
@@ -764,7 +797,7 @@ export default function App() {
 
   const renderActiveView = () => {
     switch (activeView) {
-      case 'sermon': return <SermonBuilder apiKey={apiKey} />;
+      case 'slideCreator': return <SlideCreator apiKey={apiKey} />;
       case 'chordpro': return <ChordProImporter />;
       case 'settings': return <AppSettings apiKey={apiKey} setApiKey={setApiKey} />;
       default: return <ChordProImporter />;
@@ -795,7 +828,7 @@ export default function App() {
            </div>
            <nav className="space-y-2">
              <NavLink view="chordpro" label="ChordPro Editor" icon={Music} />
-             <NavLink view="sermon" label="Sermon Builder" icon={BookOpen} />
+             <NavLink view="slideCreator" label="Slide Creator" icon={ListChecks} />
              <div className="pt-3 mt-3 border-t border-white/10">
                  <NavLink view="settings" label="Settings" icon={Settings} />
              </div>
