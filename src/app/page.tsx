@@ -423,7 +423,7 @@ const ChordProImporter = () => {
             } else if (line.type === 'comment') {
                 html += `<div class="comment">${rtfEscape(line.content)}</div>`;
             } else if (line.type === 'lyrics' && line.items) {
-                if (line.items.length === 0) { return; } 
+                if (line.items.length === 0) {  return; } 
                 
                 let chordLine = '';
                 let lyricLine = '';
@@ -473,7 +473,7 @@ const ChordProImporter = () => {
 
     const generateRtfContent = () => {
         if (!processedSong) return null;
-        addLog("--- GENERATING RTF (Arial, Corrected Spacing & Meta Brace) ---");
+        addLog("--- GENERATING RTF (Arial, Corrected Braces & Spacing) ---");
         const songToFormat = processedSong;
         
         let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red128\\green128\\blue128;}\\pard\\slmult1\\f0\\fs36`;
@@ -489,40 +489,41 @@ const ChordProImporter = () => {
         rtf += metaRtf + `\\par`;
         
         songToFormat.body.forEach((line, index) => {
+            rtf += `\\pard `; 
             if (line.type === 'section') {
-                if (index > 0) rtf += `\\par\\par`;
-                rtf += `{\\pard\\b ${rtfEscape(line.content)}\\par}`;
+                if (index > 0) rtf += `\\par`; 
+                rtf += `{\\b ${rtfEscape(line.content)}}`;
             } else if (line.type === 'comment') {
-                rtf += `{\\pard\\i ${rtfEscape(line.content)}\\par}`;
+                rtf += `{\\i ${rtfEscape(line.content)}}`;
             } else if (line.type === 'lyrics' && line.items) {
-                if (line.items.length === 0) {
-                     rtf += `{\\pard\\par}`; return;
-                }
-                
-                let chordLine = '';
-                let lyricLine = '';
-                line.items.forEach((item, itemIndex) => {
-                    const chord = simplifyChordDisplay(item.chord) || '';
-                    const lyrics = item.lyrics || '';
-                    let effectiveLength = lyrics.length;
-                    if (itemIndex > 0) {
-                        effectiveLength = Math.round(effectiveLength * 1.5); 
+                if (line.items.length === 0) { /* no explicit \par needed if we add one after anyway */ }
+                else {
+                    let chordLine = '';
+                    let lyricLine = '';
+                    line.items.forEach((item, itemIndex) => {
+                        const chord = simplifyChordDisplay(item.chord) || '';
+                        const lyrics = item.lyrics || '';
+                        let effectiveLength = lyrics.length;
+                        if (itemIndex > 0) {
+                            effectiveLength = Math.round(effectiveLength * 1.5);
+                        }
+                        if (chord) {
+                            chordLine += chord;
+                            const padding = Math.max(0, effectiveLength - chord.length);
+                            chordLine += ' '.repeat(padding);
+                        } else {
+                            chordLine += ' '.repeat(effectiveLength);
+                        }
+                        lyricLine += lyrics;
+                    });
+                    
+                    if (chordLine.trim().length > 0) {
+                        rtf += `{\\b\\cf1 ${rtfEscape(chordLine)}}\\par\\pard `;
                     }
-                    if (chord) {
-                        chordLine += chord;
-                        const padding = Math.max(0, effectiveLength - chord.length);
-                        chordLine += ' '.repeat(padding);
-                    } else {
-                        chordLine += ' '.repeat(effectiveLength);
-                    }
-                    lyricLine += lyrics;
-                });
-                
-                if (chordLine.trim().length > 0) {
-                    rtf += `{\\pard\\slmult1\\f0\\fs36\\b\\cf1 ${rtfEscape(chordLine)}\\par}`;
+                    rtf += `{\\cf0 ${rtfEscape(lyricLine)}}`;
                 }
-                rtf += `{\\pard\\slmult1\\f0\\fs36\\cf0 ${rtfEscape(lyricLine)}\\par}`;
             }
+            rtf += `\\par`;
         });
         
         const footerMeta = songToFormat.meta || {};
@@ -533,8 +534,6 @@ const ChordProImporter = () => {
             if (footerMeta.footer) footerRtfContent += `${rtfEscape(footerMeta.footer)}\\line `;
             if (songToFormat.footer_comments && songToFormat.footer_comments.length > 0) {
                 if(footerRtfContent.trim() && !footerRtfContent.endsWith('\\line ')) footerRtfContent += '\\line ';
-                else if (footerRtfContent.trim()) {} 
-                else {} 
                 footerRtfContent += songToFormat.footer_comments.map(fc => rtfEscape(fc)).join('\\line ');
             }
             if (footerRtfContent.endsWith('\\line ')) {
@@ -551,7 +550,7 @@ const ChordProImporter = () => {
     
     const generateRtfContentMono = () => {
         if (!processedSong) return null;
-        addLog("--- GENERATING RTF (Mono, Corrected Spacing & Meta Brace) ---");
+        addLog("--- GENERATING RTF (Mono, Corrected Braces & Spacing) ---");
         const songToFormat = processedSong;
         
         let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Courier New;}{\\f1 Arial;}}{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red128\\green128\\blue128;}\\pard\\slmult1\\f0\\fs36`;
@@ -563,41 +562,45 @@ const ChordProImporter = () => {
             metaRtf += `Artist: ${rtfEscape(songToFormat.artist)}   `;
         }
         metaRtf += `{\\b\\f1\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}}`; 
+        metaRtf += `}`;
         rtf += metaRtf + `\\par`;
         
         songToFormat.body.forEach((line, index) => {
+            rtf += `\\pard `;
             if (line.type === 'section') {
-                if (index > 0) rtf += `\\par\\par`;
-                rtf += `{\\pard\\b\\f1 ${rtfEscape(line.content)}\\par}`;
+                if (index > 0) rtf += `\\par`;
+                rtf += `{\\b\\f1 ${rtfEscape(line.content)}}`;
             } else if (line.type === 'comment') {
-                rtf += `{\\pard\\i\\f1 ${rtfEscape(line.content)}\\par}`;
+                rtf += `{\\i\\f1 ${rtfEscape(line.content)}}`;
             } else if (line.type === 'lyrics' && line.items) {
-                if (line.items.length === 0) { rtf += `{\\pard\\par}`; return; }
-                
-                let chordLine = '';
-                let lyricLine = '';
-                line.items.forEach((item, itemIndex) => {
-                    const chord = simplifyChordDisplay(item.chord) || '';
-                    const lyrics = item.lyrics || '';
-                    let effectiveLength = lyrics.length;
-                    if (itemIndex > 0) {
-                        effectiveLength = Math.round(effectiveLength * 1.5); 
+                 if (line.items.length === 0) { /* no explicit \par needed */ }
+                 else {
+                    let chordLine = '';
+                    let lyricLine = '';
+                    line.items.forEach((item, itemIndex) => {
+                        const chord = simplifyChordDisplay(item.chord) || '';
+                        const lyrics = item.lyrics || '';
+                        let effectiveLength = lyrics.length;
+                        if (itemIndex > 0) {
+                            effectiveLength = Math.round(effectiveLength * 1.5);
+                        }
+                        if (chord) {
+                            chordLine += chord;
+                            const padding = Math.max(0, effectiveLength - chord.length);
+                            chordLine += ' '.repeat(padding);
+                        } else {
+                            chordLine += ' '.repeat(effectiveLength);
+                        }
+                        lyricLine += lyrics;
+                    });
+                    
+                    if (chordLine.trim().length > 0) {
+                        rtf += `{\\b\\cf1 ${rtfEscape(chordLine)}}\\par\\pard `;
                     }
-                    if (chord) {
-                        chordLine += chord;
-                        const padding = Math.max(0, effectiveLength - chord.length);
-                        chordLine += ' '.repeat(padding);
-                    } else {
-                        chordLine += ' '.repeat(effectiveLength);
-                    }
-                    lyricLine += lyrics;
-                });
-                
-                if (chordLine.trim().length > 0) {
-                    rtf += `{\\pard\\slmult1\\f0\\fs36\\b\\cf1 ${rtfEscape(chordLine)}\\par}`;
+                    rtf += `{\\cf0 ${rtfEscape(lyricLine)}}`;
                 }
-                rtf += `{\\pard\\slmult1\\f0\\fs36\\cf0 ${rtfEscape(lyricLine)}\\par}`;
             }
+            rtf += `\\par`;
         });
         
         const footerMeta = songToFormat.meta || {};
@@ -608,8 +611,6 @@ const ChordProImporter = () => {
             if (footerMeta.footer) footerRtfContent += `${rtfEscape(footerMeta.footer)}\\line `;
             if (songToFormat.footer_comments && songToFormat.footer_comments.length > 0) {
                 if(footerRtfContent.trim() && !footerRtfContent.endsWith('\\line ')) footerRtfContent += '\\line ';
-                else if (footerRtfContent.trim()) {} 
-                else {} 
                 footerRtfContent += songToFormat.footer_comments.map(fc => rtfEscape(fc)).join('\\line ');
             }
             if (footerRtfContent.endsWith('\\line ')) {
@@ -807,3 +808,4 @@ export default function App() {
     </div>
   );
 }
+
