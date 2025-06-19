@@ -2,7 +2,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
-import AppShell from '@/components/layout/AppShell';
+// AppShell is removed as src/app/page.tsx now provides its own shell for main features
 import { AuthProvider } from '@/contexts/AuthContext';
 
 export const metadata: Metadata = {
@@ -21,13 +21,11 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Geist+Sans:wght@400;500;600;700;800&family=Fira+Mono&display=swap" rel="stylesheet" />
+        {/* Font links are now managed within src/app/page.tsx for the main app style */}
       </head>
       <body className="font-body antialiased">
         <AuthProvider>
-          <AppShell>{children}</AppShell>
+          {children} {/* AppShell removed, children (like page.tsx) now render full layout */}
           <Toaster />
         </AuthProvider>
       </body>

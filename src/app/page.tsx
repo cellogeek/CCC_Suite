@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { BookOpen, Music, FileText, Download, ChevronsRight, Settings, UploadCloud, KeyRound, Eye, FileUp, Loader2, AlertCircle, PlayCircle, TestTube2, Workflow, TerminalSquare, Globe, ListChecks, EyeOff, Save, Trash2 } from 'lucide-react';
+import { BookOpenText, Music, FileText, Download, ChevronsRight, Settings, UploadCloud, KeyRound, Eye, FileUp, Loader2, AlertCircle, PlayCircle, TestTube2, Workflow, TerminalSquare, Globe, ListChecks, EyeOff, Save, Trash2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
 import { getApiKey, saveApiKey } from '@/lib/actions'; // Import actions for API key
@@ -14,8 +14,9 @@ const GlassCard = ({ children, className = '' }: { children: React.ReactNode, cl
   </div>
 );
 
-const ActionButton = ({ children, onClick, icon: Icon, className = '', disabled = false }: { children: React.ReactNode, onClick?: () => void, icon?: React.ElementType, className?: string, disabled?: boolean }) => (
+const ActionButton = ({ children, onClick, icon: Icon, className = '', disabled = false, type = "button" }: { children: React.ReactNode, onClick?: () => void, icon?: React.ElementType, className?: string, disabled?: boolean, type?: "button" | "submit" | "reset" }) => (
   <button
+    type={type}
     onClick={onClick}
     disabled={disabled}
     className={`flex items-center justify-center gap-2 px-4 py-2 bg-orange-500 text-white font-semibold rounded-lg shadow-md hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:ring-opacity-75 transition-all duration-200 disabled:bg-orange-800/50 disabled:cursor-not-allowed ${className}`}
@@ -174,7 +175,6 @@ const AppSettings = ({ appApiKey, setAppApiKey }: { appApiKey: string, setAppApi
             setAppApiKey(dbKey);
             setInputFieldValue(dbKey);
           } else if (!dbKey && appApiKey) {
-            // If no DB key, ensure input reflects current appApiKey (from env or fallback)
             setInputFieldValue(appApiKey);
           }
         })
@@ -200,7 +200,7 @@ const AppSettings = ({ appApiKey, setAppApiKey }: { appApiKey: string, setAppApi
     try {
       const result = await saveApiKey(user.uid, inputValue);
       if (result.success) {
-        setAppApiKey(inputValue); // Update parent state
+        setAppApiKey(inputValue);
         toast({ title: "Success", description: result.message });
       } else {
         toast({ title: "Error Saving Key", description: result.message, variant: "destructive" });
@@ -219,10 +219,10 @@ const AppSettings = ({ appApiKey, setAppApiKey }: { appApiKey: string, setAppApi
     }
     setIsProcessing(true);
     try {
-      const result = await saveApiKey(user.uid, ""); // Save empty string to clear
+      const result = await saveApiKey(user.uid, ""); 
       if (result.success) {
         setInputValue("");
-        setAppApiKey(""); // Update parent state
+        setAppApiKey(""); 
         toast({ title: "API Key Cleared", description: result.message });
       } else {
         toast({ title: "Error Clearing Key", description: result.message, variant: "destructive" });
@@ -894,7 +894,6 @@ const ChordProImporter = () => {
 // --- Main App Component ---
 export default function App() {
   const [activeView, setActiveView] = useState('chordpro');
-  // Initialize apiKey state: try .env, then fallback to hardcoded
   const [apiKey, setApiKey] = useState(process.env.NEXT_PUBLIC_ESV_API_KEY || "4650182c3416ca7222ac852d5f671e6884cedabf");
 
 
@@ -953,4 +952,3 @@ export default function App() {
     </div>
   );
 }
-
