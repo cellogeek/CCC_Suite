@@ -42,11 +42,10 @@ const rtfEscape = (str: string | undefined): string => {
     } else if (char === '\\') {
       result += '\\\\';
     } else if (char === '\n') {
-      result += '\\par\n'; // Ensure newline is also RTF paragraph
+      result += '\\par\n'; 
     } else if (charCode < 128) { 
       result += char;
     } else {
-      // For non-ASCII characters, use RTF Unicode escape
       result += `\\u${charCode}?`;
     }
   }
@@ -329,7 +328,7 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
   const { toast } = useToast();
 
   const [proPresenterFontName, setProPresenterFontName] = useState('Arial');
-  const [proPresenterFontSize, setProPresenterFontSize] = useState(24); // Store as points
+  const [proPresenterFontSize, setProPresenterFontSize] = useState(24); 
 
   const handleFetchVerses = async () => {
     if (!verseInput) return;
@@ -355,13 +354,10 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
           let passageText = actionResponse.data;
           const passageQuery = actionResponse.query || '';
           
-          // Remove leading passage reference if API includes it and it matches query
           if (passageQuery && passageText.startsWith(passageQuery)) {
             passageText = passageText.substring(passageQuery.length).trim();
           }
-          // (ESV) should be removed by server action's include-short-copyright=false
-          // If it persists, add: passageText = passageText.replace(/\(ESV\)\s*$/, "").trim();
-
+          
           fetched.push({id: Date.now() + Math.random(), reference: passageQuery, text: passageText});
         } else {
           anyError = true;
@@ -401,17 +397,16 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
         toast({title: "Not Ready", description: "Please fetch and format verses before downloading.", variant: "default"});
         return;
     }
-    // Default font Arial, 12pt (\fs24)
+    
     let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}\\fs24`; 
     
     parsedVerses.forEach((verse, verseIndex) => {
         if (verseIndex > 0) {
              rtf += `{\\pard\\par}`; 
         }
-        rtf += `{\\pard\\b ${rtfEscape(verse.reference)}\\b0\\par}`; // Main reference bold
+        rtf += `{\\pard\\b ${rtfEscape(verse.reference)}\\b0\\par}`; 
 
         const scriptureText = verse.text;
-        // Regex to find verse numbers like [1], [16], etc. and the text that follows
         const verseRegex = /\[(\d+)\]\s*([\s\S]*?)(?=\s*\[\d+\]|$)/g;
         
         let match;
@@ -424,12 +419,12 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
             verseMatches.forEach((matchResult) => {
                 const verseNum = matchResult[1];
                 const verseBody = matchResult[2].trim();
-                rtf += `{\\pard\\par}`; // Blank line before verse
-                rtf += `{\\pard{\\super ${verseNum}}\\nosupersub ${rtfEscape(verseBody)}\\par}`; // Superscript number, then text
+                rtf += `{\\pard\\par}`; 
+                rtf += `{\\pard{\\super ${verseNum}}\\nosupersub ${rtfEscape(verseBody)}\\par}`; 
             });
         } else { 
-            rtf += `{\\pard\\par}`; // Blank line
-            rtf += `{\\pard ${rtfEscape(scriptureText)}\\par}`; // Whole text if no verse markers
+            rtf += `{\\pard\\par}`; 
+            rtf += `{\\pard ${rtfEscape(scriptureText)}\\par}`; 
         }
     });
 
@@ -454,15 +449,15 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
     }
 
     const fontName = proPresenterFontName.trim() || "Arial";
-    const fontSizeInHalfPoints = (proPresenterFontSize > 0 ? proPresenterFontSize : 24) * 2; // Default to 24pt if invalid
+    const fontSizeInHalfPoints = (proPresenterFontSize > 0 ? proPresenterFontSize : 24) * 2; 
 
-    let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 ${rtfEscape(fontName)};}}`; // Define font
+    let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 ${rtfEscape(fontName)};}}`; 
     
     parsedVerses.forEach((verse, verseIndex) => {
         if (verseIndex > 0) {
-             rtf += `{\\pard\\par}`; // Blank "page" break
+             rtf += `{\\pard\\par}`; 
         }
-        // Main reference, with ProPresenter font/size
+        
         rtf += `{\\pard\\f0\\fs${fontSizeInHalfPoints}\\b ${rtfEscape(verse.reference)}\\b0\\par}`; 
 
         const scriptureText = verse.text;
@@ -478,13 +473,13 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
             verseMatches.forEach((matchResult) => {
                 const verseNum = matchResult[1];
                 const verseBody = matchResult[2].trim();
-                rtf += `{\\pard\\par}`; // Blank line before verse
-                // Verse with ProPresenter font/size, superscript number
+                rtf += `{\\pard\\par}`; 
+                
                 rtf += `{\\pard\\f0\\fs${fontSizeInHalfPoints}{\\super ${verseNum}}\\nosupersub ${rtfEscape(verseBody)}\\par}`;
             });
         } else { 
-            rtf += `{\\pard\\par}`; // Blank line
-            rtf += `{\\pard\\f0\\fs${fontSizeInHalfPoints} ${rtfEscape(scriptureText)}\\par}`; // Whole text if no verse markers
+            rtf += `{\\pard\\par}`; 
+            rtf += `{\\pard\\f0\\fs${fontSizeInHalfPoints} ${rtfEscape(scriptureText)}\\par}`; 
         }
     });
 
@@ -500,6 +495,75 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     toast({title: "ProPresenter RTF Downloaded", description: `RTF file with ${fontName}, ${proPresenterFontSize}pt font generated.`});
+  };
+
+  const handleGenerateRtfProPresenterVerdana = () => {
+    if (!isFormatted || parsedVerses.length === 0) {
+        toast({title: "Not Ready", description: "Please fetch and format verses before downloading for Verdana ProPresenter.", variant: "default"});
+        return;
+    }
+
+    let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Verdana;}}`; // Verdana is \f0
+
+    let totalVerseParts = 0;
+    parsedVerses.forEach(verse => {
+        const verseRegex = /\[(\d+)\]\s*([\s\S]*?)(?=\s*\[\d+\]|$)/g;
+        let match;
+        while ((match = verseRegex.exec(verse.text)) !== null) {
+            totalVerseParts++;
+        }
+    });
+     if (totalVerseParts === 0 && parsedVerses.some(v => v.text.trim())) {
+        // If only unnumbered text exists, it won't engage the 3-verse break logic
+        // but will still be formatted.
+    }
+
+    let overallVersePartCounter = 0;
+
+    parsedVerses.forEach((verse) => {
+        rtf += `{\\pard\\f0\\fs44\\b ${rtfEscape(verse.reference)}\\b0\\par}`; // Main reference: Verdana, 22pt (fs44), Bold
+
+        const scriptureText = verse.text;
+        const verseRegex = /\[(\d+)\]\s*([\s\S]*?)(?=\s*\[\d+\]|$)/g;
+        
+        let match;
+        const verseMatches = [];
+        while ((match = verseRegex.exec(scriptureText)) !== null) {
+            verseMatches.push(match);
+        }
+
+        if (verseMatches.length > 0) {
+            verseMatches.forEach((matchResult) => {
+                overallVersePartCounter++;
+                const verseNum = matchResult[1];
+                const verseBody = matchResult[2].trim();
+
+                rtf += `{\\pard\\par}`; // Blank line before each verse
+                // Verse: Verdana, 22pt (fs44), Bold, Superscript number
+                rtf += `{\\pard\\f0\\fs44\\b {\\super ${verseNum}}\\nosupersub ${rtfEscape(verseBody)}\\b0\\par}`; 
+
+                if (overallVersePartCounter % 3 === 0 && overallVersePartCounter < totalVerseParts) {
+                    rtf += `{\\pard\\par}`; // Extra blank line after every 3rd verse part, if not the last part
+                }
+            });
+        } else if (scriptureText.trim()) { // Handle passages without explicit verse numbers
+            rtf += `{\\pard\\par}`; 
+            rtf += `{\\pard\\f0\\fs44\\b ${rtfEscape(scriptureText.trim())}\\b0\\par}`;
+        }
+    });
+
+    rtf += `}`;
+    const blob = new Blob([rtf], { type: 'application/rtf' });
+    const url = URL.createObjectURL(blob);
+    const safeReference = parsedVerses.map(v => v.reference).join('_').replace(/[^a-z0-9]/gi, '_') || "slides";
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${safeReference}_pro_verdana-${new Date().toISOString().split('T')[0]}.rtf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast({title: "ProPresenter RTF (Verdana) Downloaded", description: "RTF file with Verdana 22pt Bold generated."});
   };
 
 
@@ -526,7 +590,7 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
         <h3 className="text-xl font-semibold text-white mb-4">2. Process & Download</h3>
         <div className="space-y-4">
             <div>
-                <label htmlFor="pro-font-name" className="block text-sm font-medium text-blue-200 mb-1">ProPresenter Font Name</label>
+                <label htmlFor="pro-font-name" className="block text-sm font-medium text-blue-200 mb-1">Custom ProPresenter Font Name</label>
                 <input 
                     id="pro-font-name"
                     type="text"
@@ -538,7 +602,7 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
                 />
             </div>
             <div>
-                <label htmlFor="pro-font-size" className="block text-sm font-medium text-blue-200 mb-1">ProPresenter Font Size (pt)</label>
+                <label htmlFor="pro-font-size" className="block text-sm font-medium text-blue-200 mb-1">Custom ProPresenter Font Size (pt)</label>
                 <input 
                     id="pro-font-size"
                     type="number"
@@ -550,12 +614,12 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
                     disabled={isLoading || parsedVerses.length === 0}
                 />
             </div>
-            <div className="flex flex-col sm:flex-row gap-4 pt-2">
+            <div className="flex flex-col sm:flex-row gap-4 pt-2 flex-wrap">
                 <ActionButton 
                     onClick={handleFormatSlideData} 
                     icon={TestTube2} 
                     disabled={isLoading || parsedVerses.length === 0}
-                    className={`flex-1 ${isFormatted ? 'bg-green-500 hover:bg-green-600' : ''}`}
+                    className={`flex-1 min-w-[200px] ${isFormatted ? 'bg-green-500 hover:bg-green-600' : ''}`}
                 >
                     {isFormatted ? "Data Formatted!" : "Format Slide Data"}
                 </ActionButton>
@@ -563,7 +627,7 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
                     onClick={handleGenerateRtf} 
                     icon={Download} 
                     disabled={!isFormatted || parsedVerses.length === 0 || isLoading}
-                    className="flex-1"
+                    className="flex-1 min-w-[200px]"
                 >
                     Download RTF (Standard)
                 </ActionButton>
@@ -571,9 +635,17 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
                     onClick={handleGenerateRtfProPresenter} 
                     icon={Download} 
                     disabled={!isFormatted || parsedVerses.length === 0 || isLoading}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700"
+                    className="flex-1 min-w-[200px] bg-blue-600 hover:bg-blue-700"
                 >
-                    Download RTF (ProPresenter)
+                    RTF (ProP - Custom Font)
+                </ActionButton>
+                 <ActionButton 
+                    onClick={handleGenerateRtfProPresenterVerdana} 
+                    icon={Download} 
+                    disabled={!isFormatted || parsedVerses.length === 0 || isLoading}
+                    className="flex-1 min-w-[200px] bg-teal-600 hover:bg-teal-700"
+                >
+                    RTF (ProP - Verdana 22pt)
                 </ActionButton>
             </div>
         </div>
@@ -728,7 +800,7 @@ const ChordProImporter = () => {
         let firstSectionProcessed = false;
         songToFormat.body.forEach((line, index) => {
             if (line.type === 'section') {
-                if(firstSectionProcessed){ 
+                if(firstSectionProcessed && line.content?.trim()){ 
                     html += `<br><br>`; 
                 }
                 html += `<div class="section">${rtfEscape(line.content)}</div>`;
@@ -736,7 +808,7 @@ const ChordProImporter = () => {
             } else if (line.type === 'comment') {
                 html += `<div class="comment">${rtfEscape(line.content)}</div>`;
             } else if (line.type === 'lyrics' && line.items) {
-                if (line.items.length === 0) {  return; } // Skip rendering for fully empty lyric lines (no extra <br>)
+                if (line.items.length === 0) {  return; } 
                 
                 let chordLine = '';
                 let lyricLine = '';
@@ -745,7 +817,7 @@ const ChordProImporter = () => {
                     const lyrics = item.lyrics || '';
                     
                     let effectiveLength = lyrics.length;
-                    // More aggressive padding for subsequent segments in a line to better align lyrics under chords
+                    
                     if (itemIndex > 0) {
                         effectiveLength = Math.round(effectiveLength * 1.5); 
                     }
@@ -794,24 +866,24 @@ const ChordProImporter = () => {
 
         rtf += `{\\pard\\qc\\b\\fs48 ${rtfEscape(songToFormat.title)}\\par}`;
         
-        let metaRtf = `{\\pard\\qc\\fs28\\cf2 `; // cf2 for black from colortbl
+        let metaRtf = `{\\pard\\qc\\fs28\\cf2 `; 
         if (showArtist && songToFormat.artist) {
             metaRtf += `Artist: ${rtfEscape(songToFormat.artist)}   `;
         }
-        metaRtf += `{\\b\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}}`; // cf1 for red chords
+        metaRtf += `{\\b\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}}`; 
         rtf += metaRtf + `\\par`;
         
         let firstSectionProcessed = false;
         songToFormat.body.forEach((line, index) => {
             rtf += `\\pard `; 
             if (line.type === 'section') {
-                 if(firstSectionProcessed){ rtf += `\\par\\par`; }
+                 if(firstSectionProcessed && line.content?.trim()){ rtf += `\\par\\par`; }
                  rtf += `{\\b ${rtfEscape(line.content)}}`;
                  firstSectionProcessed = true;
             } else if (line.type === 'comment') {
-                rtf += `{\\cf2 ${rtfEscape(line.content)}}`; // Using cf2 for black comments
+                rtf += `{\\cf2 ${rtfEscape(line.content)}}`; 
             } else if (line.type === 'lyrics' && line.items) {
-                if (line.items.length === 0) {  } // No explicit \par for empty ChordPro lines
+                if (line.items.length === 0) {  } 
                 else {
                     let chordLine = '';
                     let lyricLine = '';
@@ -835,7 +907,7 @@ const ChordProImporter = () => {
                     if (chordLine.trim().length > 0) {
                         rtf += `{\\b\\cf1 ${rtfEscape(chordLine)}}\\par\\pard `;
                     }
-                    rtf += `{\\cf0 ${rtfEscape(lyricLine)}}`; // cf0 for default black lyrics
+                    rtf += `{\\cf0 ${rtfEscape(lyricLine)}}`; 
                 }
             }
             rtf += `\\par`;
@@ -855,7 +927,7 @@ const ChordProImporter = () => {
                 footerRtfContent = footerRtfContent.substring(0, footerRtfContent.length - '\\line '.length);
             }
             if(footerRtfContent) {
-                rtf += `\\par\\par{\\pard\\qc\\cf2\\fs20 ${footerRtfContent}\\par}`; // cf2 for black footer
+                rtf += `\\par\\par{\\pard\\qc\\cf2\\fs20 ${footerRtfContent}\\par}`; 
             }
         }
 
@@ -870,24 +942,24 @@ const ChordProImporter = () => {
         
         let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Courier New;}{\\f1 Arial;}}{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red0\\green0\\blue0;}\\pard\\slmult1\\f0\\fs36`;
         
-        rtf += `{\\pard\\qc\\b\\f1\\fs48 ${rtfEscape(songToFormat.title)}\\par}`; // Title in Arial
+        rtf += `{\\pard\\qc\\b\\f1\\fs48 ${rtfEscape(songToFormat.title)}\\par}`; 
         
-        let metaRtf = `{\\pard\\qc\\f1\\fs28\\cf2 `; // Meta in Arial, cf2 black
+        let metaRtf = `{\\pard\\qc\\f1\\fs28\\cf2 `; 
         if (showArtist && songToFormat.artist) {
             metaRtf += `Artist: ${rtfEscape(songToFormat.artist)}   `;
         }
-        metaRtf += `{\\b\\f1\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}}`; // Key in Arial bold, cf1 red
+        metaRtf += `{\\b\\f1\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}}`; 
         rtf += metaRtf + `\\par`;
         
         let firstSectionProcessed = false;
         songToFormat.body.forEach((line, index) => {
             rtf += `\\pard `;
             if (line.type === 'section') {
-                 if(firstSectionProcessed) { rtf += `\\par\\par`; }
-                 rtf += `{\\b\\f1 ${rtfEscape(line.content)}}`; // Section in Arial
+                 if(firstSectionProcessed && line.content?.trim()) { rtf += `\\par\\par`; }
+                 rtf += `{\\b\\f1 ${rtfEscape(line.content)}}`; 
                  firstSectionProcessed = true;
             } else if (line.type === 'comment') {
-                 rtf += `{\\f1\\cf2 ${rtfEscape(line.content)}}`; // Comment in Arial, cf2 black
+                 rtf += `{\\f1\\cf2 ${rtfEscape(line.content)}}`; 
             } else if (line.type === 'lyrics' && line.items) {
                  if (line.items.length === 0) {  }
                  else {
@@ -911,9 +983,9 @@ const ChordProImporter = () => {
                     });
                     
                     if (chordLine.trim().length > 0) {
-                        rtf += `{\\f0\\b\\cf1 ${rtfEscape(chordLine)}}\\par\\pard `; // Chords in Courier New (f0), cf1 red
+                        rtf += `{\\f0\\b\\cf1 ${rtfEscape(chordLine)}}\\par\\pard `; 
                     }
-                    rtf += `{\\f0\\cf0 ${rtfEscape(lyricLine)}}`; // Lyrics in Courier New (f0), cf0 default black
+                    rtf += `{\\f0\\cf0 ${rtfEscape(lyricLine)}}`; 
                 }
             }
             rtf += `\\par`;
@@ -933,7 +1005,7 @@ const ChordProImporter = () => {
                 footerRtfContent = footerRtfContent.substring(0, footerRtfContent.length - '\\line '.length);
             }
             if(footerRtfContent) {
-                rtf += `\\par\\par{\\pard\\qc\\f1\\cf2\\fs20 ${footerRtfContent}\\par}`; // Footer in Arial (f1), cf2 black
+                rtf += `\\par\\par{\\pard\\qc\\f1\\cf2\\fs20 ${footerRtfContent}\\par}`; 
             }
         }
 
@@ -1067,7 +1139,6 @@ const ChordProImporter = () => {
 // --- Main App Component ---
 export default function App() {
   const [activeView, setActiveView] = useState('chordpro');
-  // Initialize apiKey from env variable, then fallback. AppSettings will override with user's DB key if available.
   const [apiKey, setApiKey] = useState(process.env.NEXT_PUBLIC_ESV_API_KEY || "4650182c3416ca7222ac852d5f671e6884cedabf");
 
 
