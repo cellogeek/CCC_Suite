@@ -42,10 +42,11 @@ const rtfEscape = (str: string | undefined): string => {
     } else if (char === '\\') {
       result += '\\\\';
     } else if (char === '\n') {
-      result += '\\par '; 
+      result += '\\par\n'; // Ensure newline is also RTF paragraph
     } else if (charCode < 128) { 
       result += char;
     } else {
+      // For non-ASCII characters, use RTF Unicode escape
       result += `\\u${charCode}?`;
     }
   }
@@ -327,6 +328,9 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
   const [isFormatted, setIsFormatted] = useState(false);
   const { toast } = useToast();
 
+  const [proPresenterFontName, setProPresenterFontName] = useState('Arial');
+  const [proPresenterFontSize, setProPresenterFontSize] = useState(24); // Store as points
+
   const handleFetchVerses = async () => {
     if (!verseInput) return;
     if (!apiKey) {
@@ -351,6 +355,7 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
           let passageText = actionResponse.data;
           const passageQuery = actionResponse.query || '';
           
+          // Remove leading passage reference if API includes it and it matches query
           if (passageQuery && passageText.startsWith(passageQuery)) {
             passageText = passageText.substring(passageQuery.length).trim();
           }
@@ -374,7 +379,6 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
          setError(prev => prev || 'No verses could be fetched. Please check your input and API key.');
       }
 
-
     } catch (err: any) {
         setError(err.message || "An unexpected error occurred during fetch.");
         toast({ title: "Fetch Error", description: err.message || "An unexpected error occurred.", variant: "destructive"});
@@ -397,15 +401,17 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
         toast({title: "Not Ready", description: "Please fetch and format verses before downloading.", variant: "default"});
         return;
     }
-    let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}\\fs24`; // Default font size 24pt
+    // Default font Arial, 12pt (\fs24)
+    let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}\\fs24`; 
     
     parsedVerses.forEach((verse, verseIndex) => {
         if (verseIndex > 0) {
-             rtf += `{\\pard\\par}`; // Add a blank page break for new passages after the first. (ProPresenter trick: new slide)
+             rtf += `{\\pard\\par}`; 
         }
-        rtf += `{\\pard\\b ${rtfEscape(verse.reference)}\\b0\\par}`;
+        rtf += `{\\pard\\b ${rtfEscape(verse.reference)}\\b0\\par}`; // Main reference bold
 
         const scriptureText = verse.text;
+        // Regex to find verse numbers like [1], [16], etc. and the text that follows
         const verseRegex = /\[(\d+)\]\s*([\s\S]*?)(?=\s*\[\d+\]|$)/g;
         
         let match;
@@ -418,12 +424,12 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
             verseMatches.forEach((matchResult) => {
                 const verseNum = matchResult[1];
                 const verseBody = matchResult[2].trim();
-                rtf += `{\\pard\\par}`; 
-                rtf += `{\\pard{\\super ${verseNum}}\\nosupersub ${rtfEscape(verseBody)}\\par}`;
+                rtf += `{\\pard\\par}`; // Blank line before verse
+                rtf += `{\\pard{\\super ${verseNum}}\\nosupersub ${rtfEscape(verseBody)}\\par}`; // Superscript number, then text
             });
-        } else { // If no verse markers are found, print the whole text as one block
-            rtf += `{\\pard\\par}`;
-            rtf += `{\\pard ${rtfEscape(scriptureText)}\\par}`;
+        } else { 
+            rtf += `{\\pard\\par}`; // Blank line
+            rtf += `{\\pard ${rtfEscape(scriptureText)}\\par}`; // Whole text if no verse markers
         }
     });
 
@@ -438,8 +444,64 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast({title: "RTF Downloaded", description: "Slide notes RTF file generated."});
+    toast({title: "RTF Downloaded", description: "Standard RTF file generated."});
   };
+
+  const handleGenerateRtfProPresenter = () => {
+    if (!isFormatted || parsedVerses.length === 0) {
+        toast({title: "Not Ready", description: "Please fetch and format verses before downloading.", variant: "default"});
+        return;
+    }
+
+    const fontName = proPresenterFontName.trim() || "Arial";
+    const fontSizeInHalfPoints = (proPresenterFontSize > 0 ? proPresenterFontSize : 24) * 2; // Default to 24pt if invalid
+
+    let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 ${rtfEscape(fontName)};}}`; // Define font
+    
+    parsedVerses.forEach((verse, verseIndex) => {
+        if (verseIndex > 0) {
+             rtf += `{\\pard\\par}`; // Blank "page" break
+        }
+        // Main reference, with ProPresenter font/size
+        rtf += `{\\pard\\f0\\fs${fontSizeInHalfPoints}\\b ${rtfEscape(verse.reference)}\\b0\\par}`; 
+
+        const scriptureText = verse.text;
+        const verseRegex = /\[(\d+)\]\s*([\s\S]*?)(?=\s*\[\d+\]|$)/g;
+        
+        let match;
+        const verseMatches = [];
+        while ((match = verseRegex.exec(scriptureText)) !== null) {
+            verseMatches.push(match);
+        }
+
+        if (verseMatches.length > 0) {
+            verseMatches.forEach((matchResult) => {
+                const verseNum = matchResult[1];
+                const verseBody = matchResult[2].trim();
+                rtf += `{\\pard\\par}`; // Blank line before verse
+                // Verse with ProPresenter font/size, superscript number
+                rtf += `{\\pard\\f0\\fs${fontSizeInHalfPoints}{\\super ${verseNum}}\\nosupersub ${rtfEscape(verseBody)}\\par}`;
+            });
+        } else { 
+            rtf += `{\\pard\\par}`; // Blank line
+            rtf += `{\\pard\\f0\\fs${fontSizeInHalfPoints} ${rtfEscape(scriptureText)}\\par}`; // Whole text if no verse markers
+        }
+    });
+
+    rtf += `}`;
+    const blob = new Blob([rtf], { type: 'application/rtf' });
+    const url = URL.createObjectURL(blob);
+    const safeReference = parsedVerses.map(v => v.reference).join('_').replace(/[^a-z0-9]/gi, '_') || "slides";
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${safeReference}_pro-${new Date().toISOString().split('T')[0]}.rtf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast({title: "ProPresenter RTF Downloaded", description: `RTF file with ${fontName}, ${proPresenterFontSize}pt font generated.`});
+  };
+
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -462,23 +524,58 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
       
       <GlassCard className={parsedVerses.length === 0 ? 'opacity-50 pointer-events-none' : ''}>
         <h3 className="text-xl font-semibold text-white mb-4">2. Process & Download</h3>
-        <div className="flex flex-col sm:flex-row gap-4">
-            <ActionButton 
-                onClick={handleFormatSlideData} 
-                icon={TestTube2} 
-                disabled={isLoading || parsedVerses.length === 0}
-                className={`flex-1 ${isFormatted ? 'bg-green-500 hover:bg-green-600' : ''}`}
-            >
-                {isFormatted ? "Data Formatted!" : "Format Slide Data"}
-            </ActionButton>
-            <ActionButton 
-                onClick={handleGenerateRtf} 
-                icon={Download} 
-                disabled={!isFormatted || parsedVerses.length === 0 || isLoading}
-                className="flex-1"
-            >
-                Download RTF
-            </ActionButton>
+        <div className="space-y-4">
+            <div>
+                <label htmlFor="pro-font-name" className="block text-sm font-medium text-blue-200 mb-1">ProPresenter Font Name</label>
+                <input 
+                    id="pro-font-name"
+                    type="text"
+                    value={proPresenterFontName}
+                    onChange={(e) => setProPresenterFontName(e.target.value)}
+                    className="w-full max-w-xs p-2 bg-white/10 rounded-lg text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    placeholder="e.g., Arial"
+                    disabled={isLoading || parsedVerses.length === 0}
+                />
+            </div>
+            <div>
+                <label htmlFor="pro-font-size" className="block text-sm font-medium text-blue-200 mb-1">ProPresenter Font Size (pt)</label>
+                <input 
+                    id="pro-font-size"
+                    type="number"
+                    value={proPresenterFontSize}
+                    onChange={(e) => setProPresenterFontSize(parseInt(e.target.value, 10) || 24)}
+                    className="w-full max-w-xs p-2 bg-white/10 rounded-lg text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    placeholder="e.g., 24"
+                    min="8" 
+                    disabled={isLoading || parsedVerses.length === 0}
+                />
+            </div>
+            <div className="flex flex-col sm:flex-row gap-4 pt-2">
+                <ActionButton 
+                    onClick={handleFormatSlideData} 
+                    icon={TestTube2} 
+                    disabled={isLoading || parsedVerses.length === 0}
+                    className={`flex-1 ${isFormatted ? 'bg-green-500 hover:bg-green-600' : ''}`}
+                >
+                    {isFormatted ? "Data Formatted!" : "Format Slide Data"}
+                </ActionButton>
+                <ActionButton 
+                    onClick={handleGenerateRtf} 
+                    icon={Download} 
+                    disabled={!isFormatted || parsedVerses.length === 0 || isLoading}
+                    className="flex-1"
+                >
+                    Download RTF (Standard)
+                </ActionButton>
+                 <ActionButton 
+                    onClick={handleGenerateRtfProPresenter} 
+                    icon={Download} 
+                    disabled={!isFormatted || parsedVerses.length === 0 || isLoading}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700"
+                >
+                    Download RTF (ProPresenter)
+                </ActionButton>
+            </div>
         </div>
       </GlassCard>
     </div>
@@ -631,7 +728,7 @@ const ChordProImporter = () => {
         let firstSectionProcessed = false;
         songToFormat.body.forEach((line, index) => {
             if (line.type === 'section') {
-                if(firstSectionProcessed){ // Add space before sections, but not the very first one after meta.
+                if(firstSectionProcessed){ 
                     html += `<br><br>`; 
                 }
                 html += `<div class="section">${rtfEscape(line.content)}</div>`;
@@ -639,7 +736,7 @@ const ChordProImporter = () => {
             } else if (line.type === 'comment') {
                 html += `<div class="comment">${rtfEscape(line.content)}</div>`;
             } else if (line.type === 'lyrics' && line.items) {
-                if (line.items.length === 0) {  return; } // Skip rendering for fully empty lyric lines
+                if (line.items.length === 0) {  return; } // Skip rendering for fully empty lyric lines (no extra <br>)
                 
                 let chordLine = '';
                 let lyricLine = '';
@@ -648,6 +745,7 @@ const ChordProImporter = () => {
                     const lyrics = item.lyrics || '';
                     
                     let effectiveLength = lyrics.length;
+                    // More aggressive padding for subsequent segments in a line to better align lyrics under chords
                     if (itemIndex > 0) {
                         effectiveLength = Math.round(effectiveLength * 1.5); 
                     }
@@ -696,11 +794,11 @@ const ChordProImporter = () => {
 
         rtf += `{\\pard\\qc\\b\\fs48 ${rtfEscape(songToFormat.title)}\\par}`;
         
-        let metaRtf = `{\\pard\\qc\\fs28\\cf2 `;
+        let metaRtf = `{\\pard\\qc\\fs28\\cf2 `; // cf2 for black from colortbl
         if (showArtist && songToFormat.artist) {
             metaRtf += `Artist: ${rtfEscape(songToFormat.artist)}   `;
         }
-        metaRtf += `{\\b\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}}`; 
+        metaRtf += `{\\b\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}}`; // cf1 for red chords
         rtf += metaRtf + `\\par`;
         
         let firstSectionProcessed = false;
@@ -711,9 +809,9 @@ const ChordProImporter = () => {
                  rtf += `{\\b ${rtfEscape(line.content)}}`;
                  firstSectionProcessed = true;
             } else if (line.type === 'comment') {
-                rtf += `{\\cf3 ${rtfEscape(line.content)}}`; // Using cf3 for black comments
+                rtf += `{\\cf2 ${rtfEscape(line.content)}}`; // Using cf2 for black comments
             } else if (line.type === 'lyrics' && line.items) {
-                if (line.items.length === 0) {  }
+                if (line.items.length === 0) {  } // No explicit \par for empty ChordPro lines
                 else {
                     let chordLine = '';
                     let lyricLine = '';
@@ -737,7 +835,7 @@ const ChordProImporter = () => {
                     if (chordLine.trim().length > 0) {
                         rtf += `{\\b\\cf1 ${rtfEscape(chordLine)}}\\par\\pard `;
                     }
-                    rtf += `{\\cf0 ${rtfEscape(lyricLine)}}`;
+                    rtf += `{\\cf0 ${rtfEscape(lyricLine)}}`; // cf0 for default black lyrics
                 }
             }
             rtf += `\\par`;
@@ -757,7 +855,7 @@ const ChordProImporter = () => {
                 footerRtfContent = footerRtfContent.substring(0, footerRtfContent.length - '\\line '.length);
             }
             if(footerRtfContent) {
-                rtf += `\\par\\par{\\pard\\qc\\cf2\\fs20 ${footerRtfContent}\\par}`;
+                rtf += `\\par\\par{\\pard\\qc\\cf2\\fs20 ${footerRtfContent}\\par}`; // cf2 for black footer
             }
         }
 
@@ -772,13 +870,13 @@ const ChordProImporter = () => {
         
         let rtf = `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Courier New;}{\\f1 Arial;}}{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red0\\green0\\blue0;}\\pard\\slmult1\\f0\\fs36`;
         
-        rtf += `{\\pard\\qc\\b\\f1\\fs48 ${rtfEscape(songToFormat.title)}\\par}`;
+        rtf += `{\\pard\\qc\\b\\f1\\fs48 ${rtfEscape(songToFormat.title)}\\par}`; // Title in Arial
         
-        let metaRtf = `{\\pard\\qc\\f1\\fs28\\cf2 `;
+        let metaRtf = `{\\pard\\qc\\f1\\fs28\\cf2 `; // Meta in Arial, cf2 black
         if (showArtist && songToFormat.artist) {
             metaRtf += `Artist: ${rtfEscape(songToFormat.artist)}   `;
         }
-        metaRtf += `{\\b\\f1\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}}`; 
+        metaRtf += `{\\b\\f1\\fs36\\cf1 Key: ${rtfEscape(songToFormat.key)}}}`; // Key in Arial bold, cf1 red
         rtf += metaRtf + `\\par`;
         
         let firstSectionProcessed = false;
@@ -786,10 +884,10 @@ const ChordProImporter = () => {
             rtf += `\\pard `;
             if (line.type === 'section') {
                  if(firstSectionProcessed) { rtf += `\\par\\par`; }
-                 rtf += `{\\b\\f1 ${rtfEscape(line.content)}}`;
+                 rtf += `{\\b\\f1 ${rtfEscape(line.content)}}`; // Section in Arial
                  firstSectionProcessed = true;
             } else if (line.type === 'comment') {
-                 rtf += `{\\cf3 ${rtfEscape(line.content)}}`; // Using cf3 for black comments
+                 rtf += `{\\f1\\cf2 ${rtfEscape(line.content)}}`; // Comment in Arial, cf2 black
             } else if (line.type === 'lyrics' && line.items) {
                  if (line.items.length === 0) {  }
                  else {
@@ -813,9 +911,9 @@ const ChordProImporter = () => {
                     });
                     
                     if (chordLine.trim().length > 0) {
-                        rtf += `{\\b\\cf1 ${rtfEscape(chordLine)}}\\par\\pard `;
+                        rtf += `{\\f0\\b\\cf1 ${rtfEscape(chordLine)}}\\par\\pard `; // Chords in Courier New (f0), cf1 red
                     }
-                    rtf += `{\\cf0 ${rtfEscape(lyricLine)}}`;
+                    rtf += `{\\f0\\cf0 ${rtfEscape(lyricLine)}}`; // Lyrics in Courier New (f0), cf0 default black
                 }
             }
             rtf += `\\par`;
@@ -835,7 +933,7 @@ const ChordProImporter = () => {
                 footerRtfContent = footerRtfContent.substring(0, footerRtfContent.length - '\\line '.length);
             }
             if(footerRtfContent) {
-                rtf += `\\par\\par{\\pard\\qc\\f1\\cf2\\fs20 ${footerRtfContent}\\par}`;
+                rtf += `\\par\\par{\\pard\\qc\\f1\\cf2\\fs20 ${footerRtfContent}\\par}`; // Footer in Arial (f1), cf2 black
             }
         }
 
@@ -969,6 +1067,7 @@ const ChordProImporter = () => {
 // --- Main App Component ---
 export default function App() {
   const [activeView, setActiveView] = useState('chordpro');
+  // Initialize apiKey from env variable, then fallback. AppSettings will override with user's DB key if available.
   const [apiKey, setApiKey] = useState(process.env.NEXT_PUBLIC_ESV_API_KEY || "4650182c3416ca7222ac852d5f671e6884cedabf");
 
 
