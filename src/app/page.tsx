@@ -26,7 +26,33 @@ const ActionButton = ({ children, onClick, icon: Icon, className = '', disabled 
   </button>
 );
 
-const rtfEscape = (str: string | undefined): string => String(str || '').replace(/\\/g, '\\\\').replace(/{/g, '\\{').replace(/}/g, '\\}');
+const rtfEscape = (str: string | undefined): string => {
+  if (str === undefined || str === null) {
+    return '';
+  }
+  let result = '';
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i];
+    const charCode = str.charCodeAt(i);
+
+    if (char === '{') {
+      result += '\\{';
+    } else if (char === '}') {
+      result += '\\}';
+    } else if (char === '\\') {
+      result += '\\\\';
+    } else if (charCode < 128) { // Standard ASCII characters
+      result += char;
+    } else {
+      // For non-ASCII, use RTF Unicode escape sequence \uXXXX?
+      // XXXX is the decimal Unicode code point.
+      // The '?' is a substitution character for non-Unicode RTF readers.
+      result += `\\u${charCode}?`;
+    }
+  }
+  return result;
+};
+
 
 // --- CUSTOM PARSING ENGINE V9 with Smart Footer Detection ---
 interface SongLineItem {
@@ -547,7 +573,7 @@ const ChordProImporter = () => {
                 .meta-info { font-size: 14pt; text-align: center; color: black; font-weight: bold; margin-bottom: 36px; font-family: Arial, sans-serif; }
                 .line-pair { margin-bottom: 18pt; }
                 .chord-line, .lyric-line { font-family: 'DejaVu Sans Mono', Menlo, Monaco, Consolas, monospace; font-size: 18pt; white-space: pre; font-weight: bold; } 
-                .lyric-line { color: black; }
+                .lyric-line { color: black; font-weight: bold; }
                 .chord-line { color: #ff0000; }
                 .section { font-weight: bold; color: black; font-family: Arial, sans-serif; }
                 .comment { color: black; font-weight: bold; font-family: Arial, sans-serif; } 
@@ -558,12 +584,14 @@ const ChordProImporter = () => {
         if (showArtist && songToFormat.artist) {
             metaHtml += `Artist: ${rtfEscape(songToFormat.artist)}<br/>`;
         }
-        metaHtml += `<span class="chord-line" style="font-family: Arial, sans-serif;">Key: ${rtfEscape(songToFormat.key)}</span></div>`; 
+        metaHtml += `<span style="font-family: Arial, sans-serif;">Key: </span><span class="chord-line">${rtfEscape(songToFormat.key)}</span></div>`; 
         html += metaHtml;
 
         songToFormat.body.forEach((line, index) => {
+            if (index > 0 && line.type === 'section') {
+                 html += `<br><br>`; 
+            }
             if (line.type === 'section') {
-                if (index > 0) html += `<br><br>`; 
                 html += `<div class="section">${rtfEscape(line.content)}</div>`;
             } else if (line.type === 'comment') {
                 html += `<div class="comment">${rtfEscape(line.content)}</div>`;
@@ -634,13 +662,15 @@ const ChordProImporter = () => {
         
         songToFormat.body.forEach((line, index) => {
             rtf += `\\pard `; 
+            if (index > 0 && line.type === 'section') {
+                 rtf += `\\par\\par`; 
+            }
             if (line.type === 'section') {
-                if (index > 0) rtf += `\\par\\par`; 
                 rtf += `{\\b ${rtfEscape(line.content)}}`;
             } else if (line.type === 'comment') {
                 rtf += `{\\i ${rtfEscape(line.content)}}`;
             } else if (line.type === 'lyrics' && line.items) {
-                if (line.items.length === 0) { /* no explicit \par needed if we add one after anyway */ }
+                if (line.items.length === 0) { /* no explicit \par needed */ }
                 else {
                     let chordLine = '';
                     let lyricLine = '';
@@ -710,8 +740,10 @@ const ChordProImporter = () => {
         
         songToFormat.body.forEach((line, index) => {
             rtf += `\\pard `;
+            if (index > 0 && line.type === 'section') {
+                 rtf += `\\par\\par`;
+            }
             if (line.type === 'section') {
-                if (index > 0) rtf += `\\par\\par`;
                 rtf += `{\\b\\f1 ${rtfEscape(line.content)}}`;
             } else if (line.type === 'comment') {
                 rtf += `{\\i\\f1 ${rtfEscape(line.content)}}`;
@@ -952,3 +984,4 @@ export default function App() {
     </div>
   );
 }
+
