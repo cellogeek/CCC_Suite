@@ -3,8 +3,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BookOpen, Music, FileText, Download, ChevronsRight, Settings, UploadCloud, KeyRound, Eye, FileUp, Loader2, AlertCircle, PlayCircle, TestTube2, Workflow, TerminalSquare, Globe, Save, FolderOpen, ListChecks } from 'lucide-react';
-import { useToast } from "@/hooks/use-toast"; // Keep for potential future use if ActionButton wants to show toasts
-
+import { useToast } from "@/hooks/use-toast";
 
 // --- Helper & Utility Functions ---
 const GlassCard = ({ children, className = '' }: { children: React.ReactNode, className?: string }) => (
@@ -232,8 +231,6 @@ const SlideCreator = ({ apiKey }: { apiKey: string }) => {
         toast({title: "No Verses", description: "Fetch some verses first to format.", variant: "default"});
         return;
     }
-    // For now, formatting is a conceptual step.
-    // In the future, this could transform parsedVerses into a different structure.
     setIsFormatted(true);
     toast({title: "Formatted", description: "Slide data is ready for RTF download."});
   };
@@ -337,7 +334,7 @@ const SongPreview = ({ htmlContent }: {htmlContent: string}) => {
 
 const musicalKeys = ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"];
 
-// --- FULLY UPDATED ChordProImporter Component ---
+// --- ChordProImporter Component ---
 const ChordProImporter = () => {
     const [chordProInput, setChordProInput] = useState('');
     const [targetKey, setTargetKey] = useState('C');
@@ -407,7 +404,7 @@ const ChordProImporter = () => {
             body: parsedSong.body.map(line => {
                 if (line.type !== 'lyrics' || !line.items) return line;
                 return { ...line, items: line.items.map(item => ({ ...item, chord: CustomTransposer.transpose(item.chord, interval), })) };
-            }).filter(Boolean) // filter(Boolean) might not be necessary if all lines are returned
+            }).filter(Boolean)
         };
     }, [parsedSong, targetKey]);
 
@@ -423,7 +420,7 @@ const ChordProImporter = () => {
 
     const processedSongHtml = useMemo(() => {
         if (!processedSong) return '';
-        addLog("--- RE-GENERATING HTML (DejaVu Sans Mono Bold, Black Text, Improved Fallbacks, Corrected Spacing) ---");
+        addLog("--- RE-GENERATING HTML (DejaVu Sans Mono Bold, Black Text, No Italics, Improved Spacing) ---");
         const songToFormat = processedSong;
         
         let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${rtfEscape(songToFormat.title)}</title>
@@ -466,7 +463,6 @@ const ChordProImporter = () => {
                     
                     let effectiveLength = lyrics.length;
                     if (itemIndex > 0) {
-                        // Slightly increased multiplier for potentially better visual spacing with DejaVu Sans Mono Bold
                         effectiveLength = Math.round(effectiveLength * 1.5); 
                     }
 
@@ -702,7 +698,7 @@ const ChordProImporter = () => {
     const handleDownloadLog = () => {
         addLog("Downloading debug log.");
         const logContent = log.slice().reverse().join('\n\n'); 
-        createAndDownloadBlob(logContent, 'text/plain', 'txt');
+        createAndDownloadBlob(logContent, 'text/plain', 'log.txt'); // Changed extension
     };
 
 
@@ -784,7 +780,7 @@ const ChordProImporter = () => {
 export default function App() {
   const [activeView, setActiveView] = useState('chordpro');
   const [apiKey, setApiKey] = useState('');
-  const { toast } = useToast(); // Make toast available in the App scope if needed
+  const { toast } = useToast(); 
 
   const NavLink = ({ view, label, icon: Icon }: { view: string, label: string, icon: React.ElementType }) => (
     <button onClick={() => setActiveView(view)}
@@ -841,4 +837,3 @@ export default function App() {
     </div>
   );
 }
-
