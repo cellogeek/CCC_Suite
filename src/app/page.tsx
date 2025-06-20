@@ -2,20 +2,37 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Music, Settings, ListChecks } from 'lucide-react';
-import { useToast } from "@/hooks/use-toast"; // Assuming this path is correct
-import { useAuth } from '@/contexts/AuthContext'; // Assuming this path is correct
-import { getApiKey, saveApiKey } from '@/lib/actions'; // Assuming this path is correct
+import { Music, Settings, ListChecks, BookOpen } from 'lucide-react'; // Added BookOpen for SlideCreator
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from '@/contexts/AuthContext';
+import { getApiKey, saveApiKey } from '@/lib/actions';
 
 import { AppSettings } from '@/components/features/AppSettings';
-import { SlideCreator } from '@/components/features/SlideCreator';
+import { SlideCreator } from '@/components/features/SlideCreator'; // Updated import name
 import { ChordProImporter } from '@/components/features/ChordProImporter';
 
-// --- Main App Component ---
+
 export default function App() {
   const [activeView, setActiveView] = useState('chordpro');
-  // API key state is managed here and passed down
   const [apiKey, setApiKey] = useState(process.env.NEXT_PUBLIC_ESV_API_KEY || "4650182c3416ca7222ac852d5f671e6884cedabf");
+  const { user } = useAuth();
+  const { toast } = useToast(); // toast can be used if needed at this level
+
+   useEffect(() => {
+    if (user?.uid && !process.env.NEXT_PUBLIC_ESV_API_KEY) { // Only fetch if env key isn't set, to prioritize env key
+      getApiKey(user.uid)
+        .then(dbKey => {
+          if (dbKey) {
+            setApiKey(dbKey);
+          }
+        })
+        .catch(err => {
+          console.error("Error fetching API key from DB on app load:", err);
+          // Optionally, show a toast if fetching fails and it's critical
+          // toast({ title: "Error", description: "Could not fetch your saved API key.", variant: "destructive" });
+        });
+    }
+  }, [user?.uid, toast]);
 
 
   const NavLink = ({ view, label, icon: Icon }: { view: string, label: string, icon: React.ElementType }) => (
@@ -60,7 +77,7 @@ export default function App() {
            </div>
            <nav className="space-y-2">
              <NavLink view="chordpro" label="ChordPro Editor" icon={Music} />
-             <NavLink view="slideCreator" label="Slide Creator" icon={ListChecks} />
+             <NavLink view="slideCreator" label="Slide Creator" icon={BookOpen} /> 
              <div className="pt-3 mt-3 border-t border-white/10">
                  <NavLink view="settings" label="Settings" icon={Settings} />
              </div>
@@ -73,3 +90,4 @@ export default function App() {
     </div>
   );
 }
+
