@@ -3,8 +3,8 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BookOpen, Download, Loader2, AlertCircle, ChevronsRight } from 'lucide-react';
-import JSZip from 'jszip'; // Dependency: jszip for creating .zip archives (ProPresenter .proBundle files)
-import { saveAs } from 'file-saver'; // Dependency: file-saver for triggering file downloads in the browser
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 import { useToast } from "@/hooks/use-toast";
 import { fetchVerse as fetchVerseAction } from '@/lib/actions';
 import { GlassCard } from '@/components/ui/GlassCard';
@@ -12,24 +12,27 @@ import { Button } from '@/components/ui/button';
 import { rtfEscape } from '@/lib/utils';
 
 // --- IMPORTANT: Protobuf Imports ---
-// These imports are crucial for constructing the .pro file data.
-// They now point to the single library file you generated.
+// They now point to the individual files you generated.
 // ---- START OF REQUIRED PROTOC-GENERATED FILE IMPORTS ----
-import * as myprotos_lib from '../../generated/myprotos_lib';
+import { Presentation } from '../../generated/rv_data_Presentation_pb.js';
+import { Cue } from '../../generated/rv_data_Cue_pb.js';
+import { Action } from '../../generated/rv_data_Action_pb.js';
+import { Slide } from '../../generated/rv_data_Slide_pb.js';
+import { Element, Color } from '../../generated/rv_data_Graphics_pb.js';
+import { URL as ProtobufURL } from '../../generated/rv_data_URL_pb.js';
+import { Point } from '../../generated/rv_data_Point_pb.js';
+import { UUID } from '../../generated/rv_data_UUID_pb.js';
+import { Arrangement } from '../../generated/rv_data_Arrangement_pb.js';
+import { CueGroup } from '../../generated/rv_data_CueGroup_pb.js';
 
 const {
-  Presentation,
-  Cue,
-  Action,
-  Slide,
-  Element,
-  Color,
-  URL: ProtobufURL, // Renamed to avoid conflict with browser URL
-  Point,
-  UUID,
-  Arrangement,
-  CueGroup
-} = myprotos_lib;
+    ActionType
+} = Action;
+const {
+    ElementType,
+    ImageData,
+    TextData
+} = Element;
 // ---- END OF REQUIRED PROTOC-GENERATED FILE IMPORTS ----
 
 
@@ -248,11 +251,13 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
         }
 
         ctx.font = `bold ${fontMinPt}pt Verdana`;
+        const finalWords = text.split(/\s+/).filter(Boolean);
+        if (finalWords.length === 0) return { lines: [], fontSize: fontMinPt };
         let finalLines: string[] = [];
-        let finalCurrentLine = words[0] || "";
+        let finalCurrentLine = finalWords[0] || "";
 
-        for (let i = 1; i < words.length; i++) {
-            const word = words[i];
+        for (let i = 1; i < finalWords.length; i++) {
+            const word = finalWords[i];
             const testLine = finalCurrentLine + " " + word;
             const width = ctx.measureText(testLine).width;
             if (width < maxWidth * safeWidthRatio) {
@@ -393,15 +398,13 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
         setError('');
         try {
             if (typeof Presentation === 'undefined' || typeof Cue === 'undefined') {
-                const protoMissingError = "Protobuf JS files not loaded. Please ensure 'src/generated/myprotos_lib.js' exists and is correctly generated.";
+                const protoMissingError = "Protobuf JS files not loaded. Please ensure 'src/generated' contains the generated files.";
                 setError(protoMissingError);
                 toast({ title: "ProPresenter Export Error", description: protoMissingError, variant: "destructive" });
                 setIsLoading(false);
                 return;
             }
             
-            const ActionType = Action.ActionType;
-
             const presentationUuidStr = generateUuid();
             const presentation = new Presentation();
             presentation.setUuid(UUID.deserializeBinary(Uint8Array.from(presentationUuidStr.replace(/-/g, '').match(/.{2}/g)?.map(byte => parseInt(byte, 16)) || [])));
@@ -446,10 +449,6 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
                 element.setWidth(slideDataItem.width);
                 element.setHeight(slideDataItem.height);
                 
-                const ElementType = Element.ElementType;
-                const ImageData = Element.ImageData;
-                const TextData = Element.TextData;
-
                 if (slideDataItem.type === 'logo') {
                     element.setElementtype(ElementType.ELEMENT_TYPE_IMAGE);
                     const imageData = new ImageData();
@@ -520,7 +519,7 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
             </h2>
              <p className="text-sm text-amber-400 bg-amber-900/30 p-3 rounded-md">
               <AlertCircle size={18} className="inline mr-2" />
-              <strong>Important:</strong> This feature requires `protoc` generated files. If bundle generation fails, ensure `src/generated/myprotos_lib.js` has been correctly created and uploaded.
+              <strong>Important:</strong> This feature requires `protoc` generated files. If bundle generation fails, ensure `src/generated` contains the generated `.js` files.
             </p>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="space-y-6">
@@ -578,5 +577,3 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
         </div>
     );
 };
-
-    
