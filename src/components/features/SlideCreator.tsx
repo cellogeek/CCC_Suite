@@ -7,27 +7,29 @@ import JSZip from 'jszip'; // Dependency: jszip for creating .zip archives (ProP
 import { saveAs } from 'file-saver'; // Dependency: file-saver for triggering file downloads in the browser
 import { useToast } from "@/hooks/use-toast";
 import { fetchVerse as fetchVerseAction } from '@/lib/actions';
-import { GlassCard } from '@/components/ui/GlassCard'; // Using existing GlassCard
-import { Button } from '@/components/ui/button'; // Using ShadCN Button for consistency
+import { GlassCard } from '@/components/ui/GlassCard';
+import { Button } from '@/components/ui/button';
+import { rtfEscape } from '@/lib/utils';
 
 // --- IMPORTANT: Protobuf Imports ---
 // These imports are crucial for constructing the .pro file data.
-// YOU MUST generate these JavaScript classes using 'protoc' from the .proto files
-// (e.g., from greyshirtguy/ProPresenter7-Proto) and place them in 'src/generated/'.
-// Example 'protoc' command (run from project root, adjust paths if needed):
-// protoc --proto_path=./src/protos --js_out=library=myprotos_lib,binary:./src/generated ./src/protos/*.proto
+// They now point to the single library file you generated.
 // ---- START OF REQUIRED PROTOC-GENERATED FILE IMPORTS ----
-import { Presentation } from '@/generated/rv_data_Presentation_pb';
-import { Cue } from '@/generated/rv_data_Cue_pb';
-import { Action, Action_ActionType } from '@/generated/rv_data_Action_pb';
-import { Slide } from '@/generated/rv_data_Slide_pb';
-import { Element, Element_ElementType, Element_ImageData, Element_TextData } from '@/generated/rv_data_Graphics_pb';
-import { Color } from '@/generated/rv_data_Color_pb';
-import { URL as ProtobufURL } from '@/generated/rv_data_URL_pb'; // Renamed to avoid conflict with browser URL
-import { Point } from '@/generated/rv_data_Point_pb';
-import { UUID } from '@/generated/rv_data_UUID_pb';
-import { Arrangement } from '@/generated/rv_data_Arrangement_pb';
-import { CueGroup } from '@/generated/rv_data_CueGroup_pb';
+import * as myprotos_lib from '../../generated/myprotos_lib';
+
+const {
+  Presentation,
+  Cue,
+  Action,
+  Slide,
+  Element,
+  Color,
+  URL: ProtobufURL, // Renamed to avoid conflict with browser URL
+  Point,
+  UUID,
+  Arrangement,
+  CueGroup
+} = myprotos_lib;
 // ---- END OF REQUIRED PROTOC-GENERATED FILE IMPORTS ----
 
 
@@ -42,12 +44,7 @@ const generateUuid = () => {
 
 const getChurchLogoImageData = async (): Promise<Uint8Array> => {
     // This is a minimal, transparent 1x1 GIF for demonstration.
-    // REPLACE THIS with your actual church logo (e.g., 1.jpg) loaded as a Uint8Array or Blob.
-    // For a Next.js app, you might fetch this from the /public directory.
-    // Example:
-    // const response = await fetch('/Media/Assets/1.jpg'); // Ensure 1.jpg is in /public/Media/Assets/
-    // const imageBlob = await response.arrayBuffer();
-    // return new Uint8Array(imageBlob);
+    // For a real implementation, you would fetch your actual logo (e.g., /1.jpg from the public folder)
     const CHURCH_LOGO_IMAGE_BASE64 = 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
     const binaryString = atob(CHURCH_LOGO_IMAGE_BASE64);
     const len = binaryString.length;
@@ -59,11 +56,10 @@ const getChurchLogoImageData = async (): Promise<Uint8Array> => {
 };
 
 
-// --- Main SlideCreator Component (formerly SermonBuilder) ---
+// --- Main SlideCreator Component ---
 interface SlideDataItem {
     type: 'logo' | 'title' | 'scripture';
     content: string;
-    rtf?: string; // Will be generated
     width: number;
     height: number;
     position_x: number;
@@ -124,9 +120,14 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
             if (actionResponse.success && actionResponse.data) {
                 let passageText = actionResponse.data;
                 const query = actionResponse.query || passageQuery;
-                if (passageText.toLowerCase().startsWith(query.toLowerCase())) {
+                
+                const cleanedQuery = query.replace(/\s+/g, ' ').trim();
+                const cleanedPassage = passageText.replace(/\s+/g, ' ').trim();
+
+                if (cleanedPassage.toLowerCase().startsWith(cleanedQuery.toLowerCase())) {
                    passageText = passageText.substring(query.length).trim();
                 }
+                
                 passageText = passageText.replace(/\(ESV\)$/i, "").trim();
                 setRawVerseText(passageText);
                 toast({ title: "Success!", description: "Scripture fetched. Processing slides..."});
@@ -175,7 +176,7 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
             if (currentGroup.length === 1 && verseGroups.length > 0) {
                 const lastExistingGroup = verseGroups.pop();
                 if(lastExistingGroup) verseGroups.push([...lastExistingGroup, ...currentGroup]);
-                else verseGroups.push(currentGroup); // Should not happen if length > 0
+                else verseGroups.push(currentGroup);
             } else {
                 verseGroups.push(currentGroup);
             }
@@ -206,13 +207,13 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
         const fontMinPt = 39;
         const fontMaxPt = 49;
         const safeWidthRatio = 0.98;
+        const words = text.split(/\s+/).filter(Boolean);
+        if (words.length === 0) return { lines: [], fontSize: fontMaxPt };
 
         for (let pt = fontMaxPt; pt >= fontMinPt; pt -= 1) {
             ctx.font = `bold ${pt}pt Verdana`;
             const lineHeight = pt * 1.5;
-            const words = text.split(/\s+/).filter(Boolean);
-            if (words.length === 0) return { lines: [], fontSize: pt };
-
+            
             let lines: string[] = [];
             let currentLine = words[0];
 
@@ -248,11 +249,10 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
 
         ctx.font = `bold ${fontMinPt}pt Verdana`;
         let finalLines: string[] = [];
-        let finalCurrentLine = text.split(/\s+/).filter(Boolean)[0] || "";
-        const finalWords = text.split(/\s+/).filter(Boolean);
+        let finalCurrentLine = words[0] || "";
 
-        for (let i = 1; i < finalWords.length; i++) {
-            const word = finalWords[i];
+        for (let i = 1; i < words.length; i++) {
+            const word = words[i];
             const testLine = finalCurrentLine + " " + word;
             const width = ctx.measureText(testLine).width;
             if (width < maxWidth * safeWidthRatio) {
@@ -283,7 +283,7 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
         const scaleFactor = canvas.clientWidth / slideWidth;
 
         ctx.fillStyle = 'black';
-        ctx.fillRect(0, 0, canvas.width / dpr , canvas.height / dpr); // Use scaled width/height for fillRect
+        ctx.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
 
         ctx.save();
         ctx.scale(scaleFactor, scaleFactor);
@@ -329,12 +329,16 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
                     const originalFont = ctx.font;
                     ctx.font = `bold ${fontSize * 0.6}pt Verdana`;
                     const numWidth = ctx.measureText(verseNumber).width;
+                    
+                    ctx.font = originalFont; // Use main font for text measurement
                     const textContentWidth = ctx.measureText(textOnly).width;
                     const combinedStartX = textX - (numWidth + textContentWidth) / 2;
-                    ctx.fillText(verseNumber, combinedStartX + numWidth / 2, currentLineY - (fontSize * 0.3));
-                    ctx.font = originalFont;
-                    ctx.fillText(textOnly, combinedStartX + numWidth + ctx.measureText(" ").width/2 , currentLineY);
 
+                    ctx.font = `bold ${fontSize * 0.6}pt Verdana`;
+                    ctx.fillText(verseNumber, combinedStartX + (numWidth / 2) , currentLineY - (fontSize * 0.3));
+                    
+                    ctx.font = originalFont;
+                    ctx.fillText(textOnly, combinedStartX + numWidth + ctx.measureText(" ").width / 2, currentLineY);
                 } else {
                     ctx.fillText(trimmedLine, textX, currentLineY);
                 }
@@ -354,13 +358,13 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
 
         if (slide.type === 'title') {
             const [titleText, refText] = slide.content.split('\n');
-            const titleFs = 132; // 66pt
-            const refFs = 80;    // 40pt
-            contentRtf = `\\pard\\qc\\f0\\b\\fs${titleFs}\\cf1 ${titleText || ""}\\par\\par\\fs${refFs}\\cf1 ${refText || ""}\\par`;
+            const titleFs = 132;
+            const refFs = 80;
+            contentRtf = `\\pard\\qc\\f0\\b\\fs${titleFs}\\cf1 ${rtfEscape(titleText || "")}\\par\\par\\fs${refFs}\\cf1 ${rtfEscape(refText || "")}\\par`;
         } else if (slide.type === 'scripture') {
             const dummyCanvas = document.createElement('canvas');
             const dummyCtx = dummyCanvas.getContext('2d');
-            if (!dummyCtx) return `${rtfHeader}${colorTbl}${rtfFooter}`; // Should not happen
+            if (!dummyCtx) return `${rtfHeader}${colorTbl}${rtfFooter}`;
             const plainTextForMeasurement = slide.content.replace(/(\d+\s)/g, '');
             const { fontSize } = fitTextToFrame(dummyCtx, plainTextForMeasurement, slide.width, slide.height);
             const rtfFontSize = fontSize * 2;
@@ -371,9 +375,9 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
                 const verseNumber = verseNumberMatch ? verseNumberMatch[1] : '';
                 const textOnly = verse.replace(/^(\d+)\s/, '').trim();
                 if (verseNumber) {
-                    return `\\pard\\qc\\f0\\b\\fs${rtfFontSize}\\cf1 {\\super ${verseNumber}}\\nosupersub  ${textOnly}\\par`;
+                    return `\\pard\\qc\\f0\\b\\fs${rtfFontSize}\\cf1 {\\super ${verseNumber}}\\nosupersub  ${rtfEscape(textOnly)}\\par`;
                 }
-                return `\\pard\\qc\\f0\\b\\fs${rtfFontSize}\\cf1 ${textOnly}\\par`;
+                return `\\pard\\qc\\f0\\b\\fs${rtfFontSize}\\cf1 ${rtfEscape(textOnly)}\\par`;
             }).join('\\par');
             contentRtf = verseRtf;
         }
@@ -388,26 +392,19 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
         setIsLoading(true);
         setError('');
         try {
-            // --- IMPORTANT ---
-            // The following Protobuf object creation assumes you have run 'protoc'
-            // and the generated JS files (Presentation_pb.js, Cue_pb.js, etc.)
-            // are correctly imported from '@/generated/'.
-            // If these files are missing, this section WILL FAIL.
-            // --- --- ---
-            
-            if (typeof Presentation === 'undefined' || typeof Cue === 'undefined' /* ... add checks for all imported protobuf classes */) {
-                const protoMissingError = "Protobuf JS files are missing. Please generate them using 'protoc' and place them in 'src/generated/'. Bundle creation aborted.";
+            if (typeof Presentation === 'undefined' || typeof Cue === 'undefined') {
+                const protoMissingError = "Protobuf JS files not loaded. Please ensure 'src/generated/myprotos_lib.js' exists and is correctly generated.";
                 setError(protoMissingError);
                 toast({ title: "ProPresenter Export Error", description: protoMissingError, variant: "destructive" });
                 setIsLoading(false);
                 return;
             }
+            
+            const ActionType = Action.ActionType;
 
             const presentationUuidStr = generateUuid();
             const presentation = new Presentation();
-            try {
-                 presentation.setUuid(UUID.deserializeBinary(Uint8Array.from(presentationUuidStr.replace(/-/g, '').match(/.{2}/g)?.map(byte => parseInt(byte, 16)) || [])));
-            } catch (e) { console.error("Error setting presentation UUID", e); throw e;}
+            presentation.setUuid(UUID.deserializeBinary(Uint8Array.from(presentationUuidStr.replace(/-/g, '').match(/.{2}/g)?.map(byte => parseInt(byte, 16)) || [])));
             presentation.setName((verseRef || "Sermon").replace(/[:\s]/g, '_') + "_Presentation");
             presentation.setSlidewidth(1280.0);
             presentation.setSlideheight(720.0);
@@ -434,9 +431,9 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
 
                 const action = new Action();
                 action.setUuid(actionUuid);
-                action.setActiontype(Action_ActionType.ACTION_TYPE_PRESENTATION_SLIDE);
+                action.setActiontype(ActionType.ACTION_TYPE_PRESENTATION_SLIDE);
 
-                const proSlide = new Slide(); // Renamed to avoid conflict
+                const proSlide = new Slide();
                 proSlide.setUuid(slideContentUuid);
                 proSlide.setBackgroundcolor(blackColor);
 
@@ -448,17 +445,21 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
                 element.setPosition(position);
                 element.setWidth(slideDataItem.width);
                 element.setHeight(slideDataItem.height);
+                
+                const ElementType = Element.ElementType;
+                const ImageData = Element.ImageData;
+                const TextData = Element.TextData;
 
                 if (slideDataItem.type === 'logo') {
-                    element.setElementtype(Element_ElementType.ELEMENT_TYPE_IMAGE);
-                    const imageData = new Element_ImageData();
+                    element.setElementtype(ElementType.ELEMENT_TYPE_IMAGE);
+                    const imageData = new ImageData();
                     const imageUrl = new ProtobufURL();
                     imageUrl.setPath("Media/Assets/1.jpg");
                     imageData.setSource(imageUrl);
                     element.setImage(imageData);
                 } else {
-                    element.setElementtype(Element_ElementType.ELEMENT_TYPE_TEXT);
-                    const textData = new Element_TextData();
+                    element.setElementtype(ElementType.ELEMENT_TYPE_TEXT);
+                    const textData = new TextData();
                     const rtfContent = generateRtfForSlide(slideDataItem);
                     textData.setRtfdata(new TextEncoder().encode(rtfContent));
                     element.setText(textData);
@@ -483,7 +484,7 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
             const arrangement = new Arrangement();
             arrangement.setUuid(arrangementUuid);
             arrangement.setName("Default");
-            arrangement.addGroupIdentifiers(cueGroupUuid); // Add by UUID object
+            arrangement.addGroupIdentifiers(cueGroupUuid);
             presentation.addArrangements(arrangement);
             presentation.setSelectedarrangement(arrangementUuid);
 
@@ -491,9 +492,11 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
             const zip = new JSZip();
             const bundleFileName = `${(verseRef || "Sermon").replace(/[:\s]/g, '_')}_Presentation.pro`;
             zip.file(bundleFileName, proFileBinaryData);
-            const assetsFolder = zip.folder("Media")?.folder("Assets"); // Optional chaining
-            const logoImageData = await getChurchLogoImageData();
-            assetsFolder?.file("1.jpg", logoImageData);
+            const assetsFolder = zip.folder("Media")?.folder("Assets");
+            if (assetsFolder) {
+                const logoImageData = await getChurchLogoImageData();
+                assetsFolder.file("1.jpg", logoImageData);
+            }
 
             const bundleBlob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 9 } });
             saveAs(bundleBlob, `${(verseRef || "Sermon").replace(/[:\s]/g, '_')}.proBundle`);
@@ -501,8 +504,8 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
 
         } catch (err: any) {
             console.error("Error generating ProBundle:", err);
-            setError(`Failed to generate bundle: ${err.message}. Check console for details. Ensure Protobuf files are generated and correctly placed in src/generated/.`);
-            toast({ title: "ProPresenter Export Error", description: `Failed to generate bundle: ${err.message}. Ensure Protobuf files are set up.`, variant: "destructive", duration: 10000 });
+            setError(`Failed to generate bundle: ${err.message}. Check console for details. Ensure Protobuf files are generated and correctly placed.`);
+            toast({ title: "ProPresenter Export Error", description: `Failed to generate bundle: ${err.message}.`, variant: "destructive", duration: 10000 });
         } finally {
             setIsLoading(false);
         }
@@ -515,11 +518,10 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
                 <BookOpen size={32} className="text-orange-400" /> Slide Creator
                 <span className="text-sm font-normal text-blue-300 ml-2">(ProPresenter 7.14+ Compatible)</span>
             </h2>
-            <p className="text-sm text-amber-400 bg-amber-900/30 p-3 rounded-md">
+             <p className="text-sm text-amber-400 bg-amber-900/30 p-3 rounded-md">
               <AlertCircle size={18} className="inline mr-2" />
-              <strong>Important:</strong> For ProPresenter Bundle export to work, you must first generate JavaScript Protobuf files using 'protoc' and place them in the 'src/generated/' directory. See code comments for details.
+              <strong>Important:</strong> This feature requires `protoc` generated files. If bundle generation fails, ensure `src/generated/myprotos_lib.js` has been correctly created and uploaded.
             </p>
-
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="space-y-6">
                     <GlassCard>
@@ -542,7 +544,7 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
                     </GlassCard>
                     <GlassCard>
                         <h3 className="text-xl font-semibold text-white mb-4">3. Download</h3>
-                        <p className="text-blue-200 mb-4 text-sm">This will download a `.proBundle` file containing your presentation. Ensure you have generated the Protobuf files.</p>
+                        <p className="text-blue-200 mb-4 text-sm">This will download a `.proBundle` file containing your presentation.</p>
                         <Button onClick={generateProBundle} disabled={slidesData.length === 0 || isLoading} className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-primary-foreground">
                             {isLoading && slidesData.length > 0 ? <Loader2 size={18} className="animate-spin mr-2" /> : <Download size={18} className="mr-2" />}
                             {isLoading && slidesData.length > 0 ? 'Generating Bundle...' : 'Download ProPresenter Bundle'}
@@ -577,3 +579,4 @@ export const SlideCreator = ({ apiKey }: { apiKey: string }) => {
     );
 };
 
+    
