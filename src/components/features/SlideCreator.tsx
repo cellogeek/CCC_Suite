@@ -14,16 +14,16 @@ import { rtfEscape } from '@/lib/utils';
 // --- IMPORTANT: Protobuf Imports ---
 // They now point to the individual files you generated.
 // ---- START OF REQUIRED PROTOC-GENERATED FILE IMPORTS ----
-import { Presentation } from '../../generated/rv_data_Presentation_pb.js';
-import { Cue } from '../../generated/rv_data_Cue_pb.js';
-import { Action } from '../../generated/rv_data_Action_pb.js';
-import { Slide } from '../../generated/rv_data_Slide_pb.js';
-import { Element, Color } from '../../generated/rv_data_Graphics_pb.js';
-import { URL as ProtobufURL } from '../../generated/rv_data_URL_pb.js';
-import { Point } from '../../generated/rv_data_Point_pb.js';
-import { UUID } from '../../generated/rv_data_UUID_pb.js';
-import { Arrangement } from '../../generated/rv_data_Arrangement_pb.js';
-import { CueGroup } from '../../generated/rv_data_CueGroup_pb.js';
+import { Presentation } from '../generated/rv_data_Presentation_pb.js';
+import { Cue } from '../generated/rv_data_Cue_pb.js';
+import { Action } from '../generated/rv_data_Action_pb.js';
+import { Slide } from '../generated/rv_data_Slide_pb.js';
+import { Element, Color } from '../generated/rv_data_Graphics_pb.js';
+import { URL as ProtobufURL } from '../generated/rv_data_URL_pb.js';
+import { Point } from '../generated/rv_data_Point_pb.js';
+import { UUID } from '../generated/rv_data_UUID_pb.js';
+import { Arrangement } from '../generated/rv_data_Arrangement_pb.js';
+import { CueGroup } from '../generated/rv_data_CueGroup_pb.js';
 
 const {
     ActionType
