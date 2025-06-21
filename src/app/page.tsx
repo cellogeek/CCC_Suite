@@ -1,25 +1,47 @@
-
 "use client";
 
+// --- React and Hooks ---
 import React, { useState, useEffect } from 'react';
-import { Music, Settings, ListChecks, BookOpen } from 'lucide-react'; // Added BookOpen for SlideCreator
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
-import { getApiKey, saveApiKey } from '@/lib/actions';
 
+// --- Utils and Actions ---
+import { getApiKey } from '@/lib/actions';
+
+// --- UI and Icons ---
+import { Music, Settings, BookOpen } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+
+// --- Component Imports (Static) ---
 import { AppSettings } from '@/components/features/AppSettings';
-import { SlideCreator } from '@/components/features/SlideCreator'; // Updated import name
 import { ChordProImporter } from '@/components/features/ChordProImporter';
+
+// --- START OF THE FIX: NEXT.JS DYNAMIC IMPORT ---
+// Import 'dynamic' from Next.js to enable lazy loading
+import dynamic from 'next/dynamic';
+
+// Dynamically import SlideCreator. It will now only be loaded when needed.
+const SlideCreator = dynamic(() => import('@/components/features/SlideCreator'), {
+  // Disable Server-Side Rendering for this component as it's interactive
+  ssr: false, 
+  // Display a loading skeleton as a fallback while the component's code is downloaded
+  loading: () => (
+    <div className="w-full h-full flex justify-center items-center p-8 animate-fade-in">
+      <Skeleton className="w-full h-full max-w-4xl rounded-lg" />
+    </div>
+  ),
+});
+// --- END OF THE FIX ---
 
 
 export default function App() {
   const [activeView, setActiveView] = useState('chordpro');
   const [apiKey, setApiKey] = useState(process.env.NEXT_PUBLIC_ESV_API_KEY || "4650182c3416ca7222ac852d5f671e6884cedabf");
   const { user } = useAuth();
-  const { toast } = useToast(); // toast can be used if needed at this level
+  const { toast } = useToast();
 
    useEffect(() => {
-    if (user?.uid && !process.env.NEXT_PUBLIC_ESV_API_KEY) { // Only fetch if env key isn't set, to prioritize env key
+    if (user?.uid && !process.env.NEXT_PUBLIC_ESV_API_KEY) { 
       getApiKey(user.uid)
         .then(dbKey => {
           if (dbKey) {
@@ -28,11 +50,9 @@ export default function App() {
         })
         .catch(err => {
           console.error("Error fetching API key from DB on app load:", err);
-          // Optionally, show a toast if fetching fails and it's critical
-          // toast({ title: "Error", description: "Could not fetch your saved API key.", variant: "destructive" });
         });
     }
-  }, [user?.uid, toast]);
+  }, [user?.uid]);
 
 
   const NavLink = ({ view, label, icon: Icon }: { view: string, label: string, icon: React.ElementType }) => (
@@ -46,6 +66,7 @@ export default function App() {
 
   const renderActiveView = () => {
     switch (activeView) {
+      // Re-enabled the 'slideCreator' view
       case 'slideCreator': return <SlideCreator apiKey={apiKey} />;
       case 'chordpro': return <ChordProImporter />;
       case 'settings': return <AppSettings appApiKey={apiKey} setAppApiKey={setApiKey} />;
@@ -77,6 +98,7 @@ export default function App() {
            </div>
            <nav className="space-y-2">
              <NavLink view="chordpro" label="ChordPro Editor" icon={Music} />
+             {/* Re-enabled the link to the Slide Creator */}
              <NavLink view="slideCreator" label="Slide Creator" icon={BookOpen} /> 
              <div className="pt-3 mt-3 border-t border-white/10">
                  <NavLink view="settings" label="Settings" icon={Settings} />
@@ -90,4 +112,3 @@ export default function App() {
     </div>
   );
 }
-
